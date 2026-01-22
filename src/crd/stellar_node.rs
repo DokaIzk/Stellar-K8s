@@ -97,8 +97,13 @@ pub struct StellarNodeSpec {
     pub replicas: i32,
 
     /// Suspend the node (scale to 0 without deleting resources)
+    /// The operator still manages the resources, but keeps them inactive.
     #[serde(default)]
     pub suspended: bool,
+
+    /// Enable alerting via PrometheusRule or ConfigMap
+    #[serde(default)]
+    pub alerting: bool,
 
     /// External database configuration for managed Postgres databases
     /// When provided, database credentials will be fetched from the specified Secret
@@ -128,6 +133,14 @@ impl StellarNodeSpec {
             NodeType::Validator => {
                 if self.validator_config.is_none() {
                     return Err("validatorConfig is required for Validator nodes".to_string());
+                }
+                if let Some(vc) = &self.validator_config {
+                    if vc.enable_history_archive && vc.history_archive_urls.is_empty() {
+                        return Err(
+                            "historyArchiveUrls must not be empty when enableHistoryArchive is true"
+                                .to_string(),
+                        );
+                    }
                 }
                 if self.replicas != 1 {
                     return Err("Validator nodes must have exactly 1 replica".to_string());
