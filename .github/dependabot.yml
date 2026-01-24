@@ -11,8 +11,6 @@ updates:
       day: "monday"
       time: "09:00"
     open-pull-requests-limit: 5
-    reviewers:
-      - "stellar-k8s-maintainers"
     labels:
       - "dependencies"
       - "github-actions"
@@ -28,8 +26,6 @@ updates:
       day: "monday"
       time: "09:00"
     open-pull-requests-limit: 10
-    reviewers:
-      - "stellar-k8s-maintainers"
     labels:
       - "dependencies"
       - "rust"
@@ -64,8 +60,6 @@ updates:
       day: "monday"
       time: "09:00"
     open-pull-requests-limit: 3
-    reviewers:
-      - "stellar-k8s-maintainers"
     labels:
       - "dependencies"
       - "docker"
@@ -81,8 +75,6 @@ updates:
       day: "monday"
       time: "09:00"
     open-pull-requests-limit: 3
-    reviewers:
-      - "stellar-k8s-maintainers"
     labels:
       - "dependencies"
       - "helm"
