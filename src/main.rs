@@ -14,6 +14,10 @@ struct Args {
     /// Operator namespace
     #[arg(long, env = "OPERATOR_NAMESPACE", default_value = "default")]
     namespace: String,
+
+    /// Run in dry-run mode (calculate changes without applying them)
+    #[arg(long, env = "DRY_RUN")]
+    dry_run: bool,
 }
 
 #[tokio::main]
@@ -130,6 +134,7 @@ async fn main() -> Result<(), Error> {
         enable_mtls: args.enable_mtls,
         operator_namespace: args.namespace.clone(),
         mtls_config: mtls_config.clone(),
+        dry_run: args.dry_run,
     });
 
     // Start the REST API server

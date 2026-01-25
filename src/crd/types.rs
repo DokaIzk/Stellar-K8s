@@ -1107,7 +1107,7 @@ pub enum MTLSMode {
 }
 
 /// ExternalDNS configuration for automatic DNS record management
-#[derive(Clone, Debug, Deserialize, Serialize, JsonSchema)]
+#[derive(Clone, Debug, Deserialize, Serialize, JsonSchema, PartialEq, Eq)]
 #[serde(rename_all = "camelCase")]
 pub struct ExternalDNSConfig {
     /// DNS hostname to register (e.g., "stellar-node.example.com")

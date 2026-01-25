@@ -38,7 +38,7 @@ use kube::{
 };
 use tracing::{debug, error, info, instrument, warn};
 
-use crate::crd::{NodeType, StellarNode, StellarNodeStatus};
+use crate::crd::{DisasterRecoveryStatus, NodeType, StellarNode, StellarNodeStatus};
 use crate::error::{Error, Result};
 
 use super::archive_health::{calculate_backoff, check_history_archive_health, ArchiveHealthResult};
@@ -46,14 +46,12 @@ use super::conditions;
 use super::dr;
 use super::finalizers::STELLAR_NODE_FINALIZER;
 use super::health;
-use super::metrics;
 use super::mtls;
 use super::remediation;
 use super::resources;
 use super::vsl;
 
-// Constants
-const ARCHIVE_RETRIES_ANNOTATION: &str = "stellar.org/archive-health-retries";
+
 
 /// Shared state for the controller
 ///
@@ -65,6 +63,7 @@ pub struct ControllerState {
     pub enable_mtls: bool,
     pub operator_namespace: String,
     pub mtls_config: Option<crate::MtlsConfig>,
+    pub dry_run: bool,
 }
 
 /// Main entry point to start the controller
@@ -172,6 +171,50 @@ async fn emit_event(
     Ok(())
 }
 
+/// Action types for apply_or_emit helper
+#[derive(Debug, Clone, Copy)]
+pub enum ActionType {
+    Create,
+    Update,
+    Delete,
+}
+
+impl std::fmt::Display for ActionType {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            ActionType::Create => write!(f, "create"),
+            ActionType::Update => write!(f, "update"),
+            ActionType::Delete => write!(f, "delete"),
+        }
+    }
+}
+
+/// Helper to perform an action or emit a "WouldPatch" event in dry-run mode
+async fn apply_or_emit<Fut>(
+    ctx: &ControllerState,
+    node: &StellarNode,
+    action: ActionType,
+    resource_info: &str,
+    fut: Fut,
+) -> Result<()>
+where
+    Fut: std::future::Future<Output = Result<()>>,
+{
+    if ctx.dry_run {
+        let reason = match action {
+            ActionType::Create => "WouldCreate",
+            ActionType::Update => "WouldUpdate",
+            ActionType::Delete => "WouldDelete",
+        };
+        let message = format!("Dry Run: Would {} {}", action, resource_info);
+        info!("{}", message);
+        emit_event(&ctx.client, node, "Normal", reason, &message).await?;
+        Ok(())
+    } else {
+        fut.await
+    }
+}
+
 /// The main reconciliation function
 ///
 /// This function is called whenever:
@@ -195,7 +238,7 @@ async fn reconcile(obj: Arc<StellarNode>, ctx: Arc<ControllerState>) -> Result<A
     finalizer(&api, STELLAR_NODE_FINALIZER, obj, |event| async {
         match event {
             FinalizerEvent::Apply(node) => apply_stellar_node(&client, &node, &ctx).await,
-            FinalizerEvent::Cleanup(node) => cleanup_stellar_node(&client, &node).await,
+            FinalizerEvent::Cleanup(node) => cleanup_stellar_node(&client, &node, &ctx).await,
         }
     })
     .await
@@ -222,36 +265,47 @@ async fn apply_stellar_node(
     }
 
     // 1. Core infrastructure (PVC and ConfigMap) always managed by operator
-    resources::ensure_pvc(client, node).await?;
-    resources::ensure_config_map(client, node, None, ctx.enable_mtls).await?;
-    // 2. Handle suspension
-    if node.spec.suspended {
-        info!("Node {}/{} is suspended, scaling to 0", namespace, name);
-
+    apply_or_emit(ctx, node, ActionType::Update, "PVC and ConfigMap", async {
         resources::ensure_pvc(client, node).await?;
         resources::ensure_config_map(client, node, None, ctx.enable_mtls).await?;
+        Ok(())
+    })
+    .await?;
 
-        match node.spec.node_type {
-            NodeType::Validator => {
-                resources::ensure_statefulset(client, node, ctx.enable_mtls).await?;
+    // 2. Handle suspension
+    if node.spec.suspended {
+        apply_or_emit(ctx, node, ActionType::Update, "Suspended state resources", async {
+            resources::ensure_pvc(client, node).await?;
+            resources::ensure_config_map(client, node, None, ctx.enable_mtls).await?;
+
+            match node.spec.node_type {
+                NodeType::Validator => {
+                    resources::ensure_statefulset(client, node, ctx.enable_mtls).await?;
+                }
+                NodeType::Horizon | NodeType::SorobanRpc => {
+                    resources::ensure_deployment(client, node, ctx.enable_mtls).await?;
+                }
             }
-            NodeType::Horizon | NodeType::SorobanRpc => {
-                resources::ensure_deployment(client, node, ctx.enable_mtls).await?;
-            }
-        }
 
-        resources::ensure_service(client, node, ctx.enable_mtls).await?;
-
-        update_status(
-            client,
-            node,
-            "Maintenance",
-            Some("Manual maintenance mode active; workload management paused"),
-            0,
-            true,
-        )
+            resources::ensure_service(client, node, ctx.enable_mtls).await?;
+            Ok(())
+        })
         .await?;
-        update_suspended_status(client, node).await?;
+
+        apply_or_emit(ctx, node, ActionType::Update, "Status (Maintenance)", async {
+            update_status(
+                client,
+                node,
+                "Maintenance",
+                Some("Manual maintenance mode active; workload management paused"),
+                0,
+                true,
+            )
+            .await?;
+            update_suspended_status(client, node).await?;
+            Ok(())
+        })
+        .await?;
 
         return Ok(Action::requeue(Duration::from_secs(60)));
     }
@@ -317,7 +371,11 @@ async fn apply_stellar_node(
                         .await?;
 
                         // Update status with archive health condition (observed_generation NOT updated to trigger retry)
-                        update_archive_health_status(client, node, &health_result).await?;
+                        apply_or_emit(ctx, node, ActionType::Update, "Status (Archive Health Failed)", async {
+                            update_archive_health_status(client, node, &health_result).await?;
+                            Ok(())
+                        })
+                        .await?;
 
                         let delay = calculate_backoff(0, None, None);
                         info!(
@@ -333,7 +391,11 @@ async fn apply_stellar_node(
                             name,
                             health_result.summary()
                         );
-                        update_archive_health_status(client, node, &health_result).await?;
+                        apply_or_emit(ctx, node, ActionType::Update, "Status (Archive Health Passed)", async {
+                            update_archive_health_status(client, node, &health_result).await?;
+                            Ok(())
+                        })
+                        .await?;
                     }
                 }
             }
@@ -341,18 +403,26 @@ async fn apply_stellar_node(
     }
 
     // Update status to Creating
-    update_status(
-        client,
-        node,
-        "Creating",
-        Some("Creating resources"),
-        0,
-        true,
-    )
+    apply_or_emit(ctx, node, ActionType::Update, "Status (Creating)", async {
+        update_status(
+            client,
+            node,
+            "Creating",
+            Some("Creating resources"),
+            0,
+            true,
+        )
+        .await?;
+        Ok(())
+    })
     .await?;
 
     // 1. Create/update the PersistentVolumeClaim
-    resources::ensure_pvc(client, node).await?;
+    apply_or_emit(ctx, node, ActionType::Create, "PVC", async {
+        resources::ensure_pvc(client, node).await?;
+        Ok(())
+    })
+    .await?;
     info!("PVC ensured for {}/{}", namespace, name);
 
     // 2. Handle VSL Fetching for Validators
@@ -381,7 +451,11 @@ async fn apply_stellar_node(
     }
 
     // 3. Create/update the ConfigMap for node configuration
-    resources::ensure_config_map(client, node, quorum_override.clone(), ctx.enable_mtls).await?;
+    apply_or_emit(ctx, node, ActionType::Update, "ConfigMap", async {
+        resources::ensure_config_map(client, node, quorum_override.clone(), ctx.enable_mtls).await?;
+        Ok(())
+    })
+    .await?;
     info!("ConfigMap ensured for {}/{}", namespace, name);
 
     // 3. Handle suspension or Maintenance
@@ -400,38 +474,62 @@ async fn apply_stellar_node(
 
     if node.spec.suspended {
         info!("Node {}/{} is suspended, scaling to 0", namespace, name);
-        update_suspended_status(client, node).await?;
+        apply_or_emit(ctx, node, ActionType::Update, "Status (Suspended)", async {
+            update_suspended_status(client, node).await?;
+            Ok(())
+        })
+        .await?;
         // Continue to ensure resources exist but with 0 replicas
     }
 
     // 4. Ensure mTLS certificates
-    mtls::ensure_ca(client, &namespace).await?;
-    mtls::ensure_node_cert(client, node).await?;
+    apply_or_emit(ctx, node, ActionType::Update, "mTLS certificates", async {
+        mtls::ensure_ca(client, &namespace).await?;
+        mtls::ensure_node_cert(client, node).await?;
+        Ok(())
+    })
+    .await?;
 
     // 5. Create/update the Deployment/StatefulSet based on node type
-    match node.spec.node_type {
-        NodeType::Validator => {
-            resources::ensure_statefulset(client, node, ctx.enable_mtls).await?;
+    apply_or_emit(ctx, node, ActionType::Update, "Workload (Deployment/StatefulSet)", async {
+        match node.spec.node_type {
+            NodeType::Validator => {
+                resources::ensure_statefulset(client, node, ctx.enable_mtls).await?;
+            }
+            NodeType::Horizon | NodeType::SorobanRpc => {
+                resources::ensure_deployment(client, node, ctx.enable_mtls).await?;
+            }
         }
-        NodeType::Horizon | NodeType::SorobanRpc => {
-            resources::ensure_deployment(client, node, ctx.enable_mtls).await?;
-        }
-    }
+        Ok(())
+    })
+    .await?;
 
-    resources::ensure_service(client, node, ctx.enable_mtls).await?;
-    resources::ensure_ingress(client, node).await?;
+    apply_or_emit(ctx, node, ActionType::Update, "Service and Ingress", async {
+        resources::ensure_service(client, node, ctx.enable_mtls).await?;
+        resources::ensure_ingress(client, node).await?;
+        Ok(())
+    })
+    .await?;
 
     // 6. Autoscaling and Monitoring
-    if node.spec.autoscaling.is_some() {
-        resources::ensure_service_monitor(client, node).await?;
-        resources::ensure_hpa(client, node).await?;
-    }
-    resources::ensure_alerting(client, node).await?;
-    resources::ensure_network_policy(client, node).await?;
+    apply_or_emit(ctx, node, ActionType::Update, "Monitoring and Scaling resources", async {
+        if node.spec.autoscaling.is_some() {
+            resources::ensure_service_monitor(client, node).await?;
+            resources::ensure_hpa(client, node).await?;
+        }
+        resources::ensure_alerting(client, node).await?;
+        resources::ensure_network_policy(client, node).await?;
+        Ok(())
+    })
+    .await?;
 
     // 7. Health Check
     let health_result = health::check_node_health(client, node, ctx.mtls_config.as_ref()).await?;
-    resources::ensure_service(client, node, ctx.enable_mtls).await?;
+    apply_or_emit(ctx, node, ActionType::Update, "Service", async {
+        resources::ensure_service(client, node, ctx.enable_mtls).await?;
+        Ok(())
+    })
+    .await?;
 
 
     debug!(
@@ -462,10 +560,15 @@ async fn apply_stellar_node(
                 }
             }
         }
+    }
 
     // 8. Disaster Recovery reconciliation
     if let Some(dr_status) = dr::reconcile_dr(client, node).await? {
-        update_dr_status(client, node, dr_status).await?;
+        apply_or_emit(ctx, node, ActionType::Update, "Status (DR)", async {
+            update_dr_status(client, node, dr_status).await?;
+            Ok(())
+        })
+        .await?;
     }
 
     // 9. Auto-remediation check
@@ -474,34 +577,42 @@ async fn apply_stellar_node(
         if stale_check.is_stale && remediation::can_remediate(node) {
             match stale_check.recommended_action {
                 remediation::RemediationLevel::Restart => {
-                    remediation::emit_remediation_event(
-                        client,
-                        node,
-                        remediation::RemediationLevel::Restart,
-                        "Stale ledger",
-                    )
-                    .await?;
-                    remediation::restart_pod(client, node).await?;
-                    remediation::update_remediation_state(
-                        client,
-                        node,
-                        stale_check.current_ledger,
-                        remediation::RemediationLevel::Restart,
-                        true,
-                    )
+                    apply_or_emit(ctx, node, ActionType::Update, "Remediation (Restart)", async {
+                        remediation::emit_remediation_event(
+                            client,
+                            node,
+                            remediation::RemediationLevel::Restart,
+                            "Stale ledger",
+                        )
+                        .await?;
+                        remediation::restart_pod(client, node).await?;
+                        remediation::update_remediation_state(
+                            client,
+                            node,
+                            stale_check.current_ledger,
+                            remediation::RemediationLevel::Restart,
+                            true,
+                        )
+                        .await?;
+                        Ok(())
+                    })
                     .await?;
                     return Ok(Action::requeue(Duration::from_secs(30)));
                 }
                 _ => {}
             }
         } else {
-            remediation::update_remediation_state(
-                client,
-                node,
-                health_result.ledger_sequence,
-                remediation::RemediationLevel::None,
-                false,
-            )
+            apply_or_emit(ctx, node, ActionType::Update, "Remediation State", async {
+                remediation::update_remediation_state(
+                    client,
+                    node,
+                    health_result.ledger_sequence,
+                    remediation::RemediationLevel::None,
+                    false,
+                )
+                .await?;
+                Ok(())
+            })
             .await?;
         }
     }
@@ -517,10 +628,14 @@ async fn apply_stellar_node(
         ("Ready", "Node is healthy and synced".to_string())
     };
 
-    update_status_with_health(client, node, phase, Some(&message), &health_result).await?;
+    apply_or_emit(ctx, node, ActionType::Update, "Status (Final)", async {
+        update_status_with_health(client, node, phase, Some(&message), &health_result).await?;
 
-    let ready_replicas = get_ready_replicas(client, node).await.unwrap_or(0);
-    update_status(client, node, phase, Some(&message), ready_replicas, true).await?;
+        let ready_replicas = get_ready_replicas(client, node).await.unwrap_or(0);
+        update_status(client, node, phase, Some(&message), ready_replicas, true).await?;
+        Ok(())
+    })
+    .await?;
 
     Ok(Action::requeue(Duration::from_secs(if phase == "Ready" {
         60
@@ -530,8 +645,12 @@ async fn apply_stellar_node(
 }
 
 /// Clean up resources when the StellarNode is deleted
-#[instrument(skip(client, node), fields(name = %node.name_any(), namespace = node.namespace()))]
-async fn cleanup_stellar_node(client: &Client, node: &StellarNode) -> Result<Action> {
+#[instrument(skip(client, node, ctx), fields(name = %node.name_any(), namespace = node.namespace()))]
+async fn cleanup_stellar_node(
+    client: &Client,
+    node: &StellarNode,
+    ctx: &ControllerState,
+) -> Result<Action> {
     let namespace = node.namespace().unwrap_or_else(|| "default".to_string());
     let name = node.name_any();
 
@@ -540,44 +659,76 @@ async fn cleanup_stellar_node(client: &Client, node: &StellarNode) -> Result<Act
     // Delete resources in reverse order of creation
 
     // 0. Delete Alerting
-    if let Err(e) = resources::delete_alerting(client, node).await {
-        warn!("Failed to delete alerting: {:?}", e);
-    }
+    apply_or_emit(ctx, node, ActionType::Delete, "Alerting", async {
+        if let Err(e) = resources::delete_alerting(client, node).await {
+            warn!("Failed to delete alerting: {:?}", e);
+        }
+        Ok(())
+    })
+    .await?;
 
     // 1. Delete HPA (if autoscaling was configured)
-    if let Err(e) = resources::delete_hpa(client, node).await {
-        warn!("Failed to delete HPA: {:?}", e);
-    }
+    apply_or_emit(ctx, node, ActionType::Delete, "HPA", async {
+        if let Err(e) = resources::delete_hpa(client, node).await {
+            warn!("Failed to delete HPA: {:?}", e);
+        }
+        Ok(())
+    })
+    .await?;
 
     // 2. Delete ServiceMonitor (if autoscaling was configured)
-    if let Err(e) = resources::delete_service_monitor(client, node).await {
-        warn!("Failed to delete ServiceMonitor: {:?}", e);
-    }
+    apply_or_emit(ctx, node, ActionType::Delete, "ServiceMonitor", async {
+        if let Err(e) = resources::delete_service_monitor(client, node).await {
+            warn!("Failed to delete ServiceMonitor: {:?}", e);
+        }
+        Ok(())
+    })
+    .await?;
 
     // 3. Delete Ingress
-    if let Err(e) = resources::delete_ingress(client, node).await {
-        warn!("Failed to delete Ingress: {:?}", e);
-    }
+    apply_or_emit(ctx, node, ActionType::Delete, "Ingress", async {
+        if let Err(e) = resources::delete_ingress(client, node).await {
+            warn!("Failed to delete Ingress: {:?}", e);
+        }
+        Ok(())
+    })
+    .await?;
 
     // 3a. Delete NetworkPolicy
-    if let Err(e) = resources::delete_network_policy(client, node).await {
-        warn!("Failed to delete NetworkPolicy: {:?}", e);
-    }
+    apply_or_emit(ctx, node, ActionType::Delete, "NetworkPolicy", async {
+        if let Err(e) = resources::delete_network_policy(client, node).await {
+            warn!("Failed to delete NetworkPolicy: {:?}", e);
+        }
+        Ok(())
+    })
+    .await?;
 
     // 4. Delete Service
-    if let Err(e) = resources::delete_service(client, node).await {
-        warn!("Failed to delete Service: {:?}", e);
-    }
+    apply_or_emit(ctx, node, ActionType::Delete, "Service", async {
+        if let Err(e) = resources::delete_service(client, node).await {
+            warn!("Failed to delete Service: {:?}", e);
+        }
+        Ok(())
+    })
+    .await?;
 
     // 5. Delete Deployment/StatefulSet
-    if let Err(e) = resources::delete_workload(client, node).await {
-        warn!("Failed to delete workload: {:?}", e);
-    }
+    apply_or_emit(ctx, node, ActionType::Delete, "Workload", async {
+        if let Err(e) = resources::delete_workload(client, node).await {
+            warn!("Failed to delete workload: {:?}", e);
+        }
+        Ok(())
+    })
+    .await?;
 
     // 6. Delete ConfigMap
-    if let Err(e) = resources::delete_config_map(client, node).await {
-        warn!("Failed to delete ConfigMap: {:?}", e);
-    }
+    apply_or_emit(ctx, node, ActionType::Delete, "ConfigMap", async {
+        if let Err(e) = resources::delete_config_map(client, node).await {
+            warn!("Failed to delete ConfigMap: {:?}", e);
+        }
+        Ok(())
+    })
+    .await?;
 
     // 7. Delete PVC based on retention policy
     if node.spec.should_delete_pvc() {
@@ -585,9 +736,13 @@ async fn cleanup_stellar_node(client: &Client, node: &StellarNode) -> Result<Act
             "Deleting PVC for node: {}/{} (retention policy: Delete)",
             namespace, name
         );
-        if let Err(e) = resources::delete_pvc(client, node).await {
-            warn!("Failed to delete PVC: {:?}", e);
-        }
+        apply_or_emit(ctx, node, ActionType::Delete, "PVC", async {
+            if let Err(e) = resources::delete_pvc(client, node).await {
+                warn!("Failed to delete PVC: {:?}", e);
+            }
+            Ok(())
+        })
+        .await?;
     } else {
         info!(
             "Retaining PVC for node: {}/{} (retention policy: Retain)",
@@ -647,6 +802,7 @@ async fn get_ready_replicas(client: &Client, node: &StellarNode) -> Result<i32> 
 }
 
 /// Update status for suspended nodes
+#[allow(deprecated)]
 async fn update_suspended_status(client: &Client, node: &StellarNode) -> Result<()> {
     let namespace = node.namespace().unwrap_or_else(|| "default".to_string());
     let api: Api<StellarNode> = Api::namespaced(client.clone(), &namespace);
@@ -699,6 +855,7 @@ async fn update_suspended_status(client: &Client, node: &StellarNode) -> Result<
 }
 
 /// Update the status subresource of a StellarNode using Kubernetes conditions pattern
+#[allow(deprecated)]
 async fn update_status(
     client: &Client,
     node: &StellarNode,
@@ -990,6 +1147,7 @@ async fn update_archive_health_status(
 }
 
 /// Update the status subresource with health check results
+#[allow(deprecated)]
 async fn update_status_with_health(
     client: &Client,
     node: &StellarNode,
@@ -1094,32 +1252,6 @@ async fn update_status_with_health(
     .map_err(Error::KubeError)?;
 
     Ok(())
-}
-
-/// Helper to get the latest ledger from the Stellar network
-async fn get_latest_network_ledger(network: &crate::crd::StellarNetwork) -> Result<u64> {
-    let url = match network {
-        crate::crd::StellarNetwork::Mainnet => "https://horizon.stellar.org",
-        crate::crd::StellarNetwork::Testnet => "https://horizon-testnet.stellar.org",
-        crate::crd::StellarNetwork::Futurenet => "https://horizon-futurenet.stellar.org",
-        crate::crd::StellarNetwork::Custom(_) => {
-            return Err(Error::ConfigError(
-                "Custom network not supported for lag calculation yet".to_string(),
-            ))
-        }
-    };
-
-    let client = reqwest::Client::new();
-    let resp = client.get(url).send().await.map_err(Error::HttpError)?;
-    let json: serde_json::Value = resp
-        .json()
-        .await
-        .map_err(|e| Error::ConfigError(e.to_string()))?;
-
-    let ledger = json["history_latest_ledger"].as_u64().ok_or_else(|| {
-        Error::ConfigError("Failed to get latest ledger from horizon".to_string())
-    })?;
-    Ok(ledger)
 }
 
 /// Update the status with DR results
