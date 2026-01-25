@@ -265,6 +265,7 @@ fn validate_ingress(ingress: &IngressConfig) -> Result<(), String> {
     Ok(())
 }
 
+#[allow(dead_code)]
 fn validate_load_balancer(lb: &LoadBalancerConfig) -> Result<(), String> {
     use super::types::LoadBalancerMode;
 
@@ -312,6 +313,7 @@ fn validate_load_balancer(lb: &LoadBalancerConfig) -> Result<(), String> {
     Ok(())
 }
 
+#[allow(dead_code)]
 fn validate_global_discovery(gd: &GlobalDiscoveryConfig) -> Result<(), String> {
     if !gd.enabled {
         return Ok(());
@@ -413,6 +415,7 @@ impl StellarNodeStatus {
     ///
     /// DEPRECATED: Use `with_conditions` instead
     #[deprecated(since = "0.2.0", note = "Use with_conditions instead")]
+    #[allow(deprecated)]
     pub fn with_phase(phase: &str) -> Self {
         Self {
             phase: phase.to_string(),
@@ -424,6 +427,7 @@ impl StellarNodeStatus {
     ///
     /// DEPRECATED: Use condition helpers instead
     #[deprecated(since = "0.2.0", note = "Use set_condition helpers instead")]
+    #[allow(deprecated)]
     pub fn update(&mut self, phase: &str, message: Option<&str>) {
         self.phase = phase.to_string();
         self.message = message.map(String::from);

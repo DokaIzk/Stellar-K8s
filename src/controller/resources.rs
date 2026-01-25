@@ -511,8 +511,9 @@ fn build_service(node: &StellarNode, enable_mtls: bool) -> Service {
 // ============================================================================
 
 /// Ensure a LoadBalancer Service exists for external access via MetalLB
-#[instrument(skip(client, node), fields(name = %node.name_any(), namespace = node.namespace()))]
-pub async fn ensure_load_balancer_service(client: &Client, node: &StellarNode) -> Result<()> {
+#[allow(dead_code)]
+#[instrument(skip(_client, node), fields(name = %node.name_any(), namespace = node.namespace()))]
+pub async fn ensure_load_balancer_service(_client: &Client, node: &StellarNode) -> Result<()> {
     // TODO: load_balancer field not yet implemented in StellarNodeSpec
     // Uncomment when LoadBalancerConfig is added to the spec
     /*
@@ -547,6 +548,7 @@ pub async fn ensure_load_balancer_service(client: &Client, node: &StellarNode) -
     */
 }
 
+#[allow(dead_code)]
 fn build_load_balancer_service(node: &StellarNode, config: &LoadBalancerConfig) -> Service {
     let labels = standard_labels(node);
     let name = resource_name(node, "lb");
@@ -702,8 +704,9 @@ fn build_load_balancer_service(node: &StellarNode, config: &LoadBalancerConfig) 
 }
 
 /// Delete the LoadBalancer Service for a node
-#[instrument(skip(client, node), fields(name = %node.name_any(), namespace = node.namespace()))]
-pub async fn delete_load_balancer_service(client: &Client, node: &StellarNode) -> Result<()> {
+#[allow(dead_code)]
+#[instrument(skip(_client, node), fields(name = %node.name_any(), namespace = node.namespace()))]
+pub async fn delete_load_balancer_service(_client: &Client, node: &StellarNode) -> Result<()> {
     // TODO: load_balancer field not yet implemented in StellarNodeSpec
     #[allow(unreachable_code)]
     {
@@ -737,8 +740,9 @@ pub async fn delete_load_balancer_service(client: &Client, node: &StellarNode) -
 /// Ensure MetalLB BGPAdvertisement and IPAddressPool ConfigMaps are documented
 /// Note: MetalLB CRDs must be created manually or via Helm; this function
 /// creates the recommended ConfigMap for cluster operators to reference.
-#[instrument(skip(client, node), fields(name = %node.name_any(), namespace = node.namespace()))]
-pub async fn ensure_metallb_config(client: &Client, node: &StellarNode) -> Result<()> {
+#[allow(dead_code)]
+#[instrument(skip(_client, node), fields(name = %node.name_any(), namespace = node.namespace()))]
+pub async fn ensure_metallb_config(_client: &Client, node: &StellarNode) -> Result<()> {
     // TODO: load_balancer field not yet implemented in StellarNodeSpec
     #[allow(unreachable_code)]
     {
@@ -771,6 +775,7 @@ pub async fn ensure_metallb_config(client: &Client, node: &StellarNode) -> Resul
     */
 }
 
+#[allow(dead_code)]
 fn build_metallb_config_map(node: &StellarNode, config: &LoadBalancerConfig) -> ConfigMap {
     let labels = standard_labels(node);
     let name = resource_name(node, "metallb-config");
@@ -1003,6 +1008,7 @@ spec:
 }
 
 /// Delete the MetalLB configuration ConfigMap
+#[allow(dead_code)]
 #[instrument(skip(client, node), fields(name = %node.name_any(), namespace = node.namespace()))]
 pub async fn delete_metallb_config(client: &Client, node: &StellarNode) -> Result<()> {
     let namespace = node.namespace().unwrap_or_else(|| "default".to_string());

@@ -25,11 +25,13 @@ use super::finalizers::STELLAR_NODE_FINALIZER;
 use super::health;
 use super::metrics;
 use super::mtls;
+use super::peer_discovery;
 use super::remediation;
 use super::resources;
 use super::vsl;
 
 // Constants
+#[allow(dead_code)]
 const ARCHIVE_RETRIES_ANNOTATION: &str = "stellar.org/archive-health-retries";
 
 /// Shared state for the controller
@@ -349,13 +351,20 @@ async fn apply_stellar_node(
     let health_result = health::check_node_health(client, node, ctx.mtls_config.as_ref()).await?;
     resources::ensure_service(client, node, ctx.enable_mtls).await?;
 
-    // 5. Perform health check to determine if node is ready
-    let health_result = health::check_node_health(client, node, ctx.mtls_config.as_ref()).await?;
-
     debug!(
         "Health check result for {}/{}: healthy={}, synced={}, message={}",
         namespace, name, health_result.healthy, health_result.synced, health_result.message
     );
+
+    // 6. Trigger peer configuration reload for validators if healthy
+    if node.spec.node_type == NodeType::Validator && health_result.healthy {
+        if let Err(e) = peer_discovery::trigger_peer_config_reload(client, node).await {
+            warn!(
+                "Failed to trigger peer config reload for {}/{}: {}",
+                namespace, name, e
+            );
+        }
+    }
 
     // 7. Trigger config-reload if VSL was updated and pod is ready
     if let Some(_quorum) = quorum_override {
@@ -744,7 +753,6 @@ async fn update_suspended_status(client: &Client, node: &StellarNode) -> Result<
     }
 
     let status = StellarNodeStatus {
-        phase: "Suspended".to_string(),
         message: Some("Node suspended - scaled to 0 replicas".to_string()),
         observed_generation: node.metadata.generation,
         replicas: 0,
@@ -1061,7 +1069,7 @@ async fn update_archive_health_status(
 async fn update_status_with_health(
     client: &Client,
     node: &StellarNode,
-    phase: &str,
+    _phase: &str,
     message: Option<&str>,
     health: &health::HealthCheckResult,
 ) -> Result<()> {
@@ -1134,7 +1142,6 @@ async fn update_status_with_health(
     }
 
     let status = StellarNodeStatus {
-        phase: phase.to_string(),
         message: message.map(String::from),
         observed_generation: node.metadata.generation,
         replicas: if node.spec.suspended {
