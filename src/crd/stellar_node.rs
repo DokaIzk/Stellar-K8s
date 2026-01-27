@@ -908,6 +908,7 @@ mod tests {
                 key_source: Default::default(),
                 kms_config: None,
                 vl_source: None,
+                hsm_config: None,
             }),
             horizon_config: None,
             soroban_config: None,

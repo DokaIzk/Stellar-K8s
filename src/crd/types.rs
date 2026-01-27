@@ -242,6 +242,7 @@ pub enum RetentionPolicy {
 ///     key_source: KeySource::Secret,
 ///     kms_config: None,
 ///     vl_source: None,
+///     hsm_config: None,
 /// };
 /// ```
 #[derive(Clone, Debug, Deserialize, Serialize, JsonSchema)]
