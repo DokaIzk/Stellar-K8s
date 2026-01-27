@@ -33,7 +33,9 @@ audit: ## Security audit
 
 test: ## Run tests
 	@echo "→ Running tests..."
-	@$(CARGO) test --workspace --all-features --lib --bins --verbose
+	@$(CARGO) test --workspace --all-features --verbose
+	@echo "→ Running doc tests..."
+	@$(CARGO) test --doc --workspace
 
 build: ## Build release
 	@echo "→ Building release..."

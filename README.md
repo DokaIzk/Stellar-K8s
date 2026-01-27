@@ -2,7 +2,7 @@
   <img src="assets/logo.png" alt="Stellar-K8s Logo" width="200" />
 </p>
 
-# Stellar-K8s: Cloud-Native Stellar Infrastructure 
+# Stellar-K8s: Cloud-Native Stellar Infrastructure
 
 ![Rust](https://img.shields.io/badge/Built%20with-Rust-orange?style=for-the-badge&logo=rust) ![Kubernetes](https://img.shields.io/badge/Kubernetes-Operator-blue?style=for-the-badge&logo=kubernetes) ![License](https://img.shields.io/badge/License-Apache%202.0-green?style=for-the-badge) ![CI/CD](https://img.shields.io/github/actions/workflow/status/stellar/stellar-k8s/ci.yml?style=for-the-badge&label=Build)
 
@@ -14,18 +14,18 @@ Designed for high availability, type safety, and minimal footprint.
 
 ---
 
-##  Key Features
+## ✨ Key Features
 
 - **🦀 Rust-Native Performance**: Built with `kube-rs` and `Tokio` for an ultra-lightweight footprint (~15MB binary) and complete memory safety.
-- ** Enterprise Reliability**: Type-safe error handling prevents runtime failures. Built-in `Finalizers` ensure clean PVC and resource cleanup.
-- ** Auto-Sync Health Checks**: Automatically monitors Horizon and Soroban RPC nodes, only marking them Ready when fully synced with the network.
+- **🛡️ Enterprise Reliability**: Type-safe error handling prevents runtime failures. Built-in `Finalizers` ensure clean PVC and resource cleanup.
+- **🏥 Auto-Sync Health Checks**: Automatically monitors Horizon and Soroban RPC nodes, only marking them Ready when fully synced with the network.
 - **GitOps Ready**: Fully compatible with ArgoCD and Flux for declarative infrastructure management.
-- ** Observable by Default**: Native Prometheus metrics integration for monitoring node health, ledger sync status, and resource usage.
+- **📈 Observable by Default**: Native Prometheus metrics integration for monitoring node health, ledger sync status, and resource usage.
 - **⚡ Soroban Ready**: First-class support for Soroban RPC nodes with captive core configuration.
 
 ---
 
-##  Architecture Overview
+## 🏗️ Architecture Overview
 
 Stellar-K8s follows the **Operator Pattern**, extending Kubernetes with a `StellarNode` Custom Resource Definition (CRD).
 
@@ -35,7 +35,7 @@ Stellar-K8s follows the **Operator Pattern**, extending Kubernetes with a `Stell
 
 ---
 
-## � Prerequisites
+## 📋 Prerequisites
 
 - **Kubernetes cluster** (1.28+)
 - **kubectl** configured
@@ -46,7 +46,7 @@ Stellar-K8s follows the **Operator Pattern**, extending Kubernetes with a `Stell
 
 ---
 
-##  Quick Start
+## 🚀 Quick Start
 
 Get a Testnet node running in under 5 minutes.
 
@@ -121,7 +121,7 @@ We welcome contributions! Please see our [Contributing Guide](CONTRIBUTING.md) f
 
 ---
 
-##  Roadmap
+## Roadmap
 
 ### Phase 1: Core Operator & Helm Charts (Current)
 
