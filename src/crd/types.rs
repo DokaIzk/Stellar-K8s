@@ -19,19 +19,7 @@ use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 
 /// Supported Stellar node types
-///
-/// Determines which Stellar service is deployed (Stellar Core, Horizon API, or Soroban RPC).
-/// Each type has different resource requirements, network roles, and configuration options.
-///
-/// # Examples
-///
-/// ```rust,no_run
-/// use stellar_k8s::crd::NodeType;
-///
-/// let node_type = NodeType::Validator;
-/// println!("Deploying {} node", node_type);
-/// ```
-#[derive(Clone, Debug, Default, Deserialize, Serialize, JsonSchema, PartialEq, Eq)]
+#[derive(Clone, Debug, Default, PartialEq, Eq, Hash, Serialize, Deserialize, JsonSchema)]
 pub enum NodeType {
     /// Full validator node running Stellar Core
     /// Participates in consensus and validates transactions
