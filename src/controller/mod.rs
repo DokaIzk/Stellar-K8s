@@ -5,6 +5,10 @@
 mod archive_health;
 pub mod conditions;
 pub mod cross_cluster;
+pub mod cve;
+mod cve_reconciler;
+#[cfg(test)]
+mod cve_test;
 pub mod dr;
 mod finalizers;
 mod health;
@@ -21,6 +25,7 @@ mod vsl;
 
 pub use archive_health::{calculate_backoff, check_history_archive_health, ArchiveHealthResult};
 pub use cross_cluster::{check_peer_latency, ensure_cross_cluster_services, PeerLatencyStatus};
+pub use cve_reconciler::reconcile_cve_patches;
 pub use finalizers::STELLAR_NODE_FINALIZER;
 pub use health::{check_node_health, HealthCheckResult};
 pub use peer_discovery::{

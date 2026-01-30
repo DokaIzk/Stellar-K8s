@@ -50,6 +50,7 @@ mod stellar_node_spec_validation {
             global_discovery: None,
             cluster: None,
             cross_cluster: None,
+            cve_handling: None,
         }
     }
 
@@ -89,6 +90,7 @@ mod stellar_node_spec_validation {
             global_discovery: None,
             cluster: None,
             cross_cluster: None,
+            cve_handling: None,
         }
     }
 
@@ -126,6 +128,7 @@ mod stellar_node_spec_validation {
             global_discovery: None,
             cluster: None,
             cross_cluster: None,
+            cve_handling: None,
         }
     }
 

@@ -208,6 +208,11 @@ pub struct StellarNodeSpec {
     /// Enables service mesh or ExternalName services for multi-cluster networking
     #[serde(skip_serializing_if = "Option::is_none")]
     pub cross_cluster: Option<CrossClusterConfig>,
+
+    /// CVE handling configuration for automated patching
+    /// Enables scanning for vulnerabilities and automatic rollout of patched versions
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub cve_handling: Option<super::types::CVEHandlingConfig>,
 }
 
 fn default_replicas() -> i32 {
@@ -1109,6 +1114,7 @@ mod tests {
             global_discovery: None,
             cluster: None,
             cross_cluster: None,
+            cve_handling: None,
         };
 
         assert!(spec.validate().is_err());
@@ -1153,6 +1159,7 @@ mod tests {
             global_discovery: None,
             cluster: None,
             cross_cluster: None,
+            cve_handling: None,
         };
 
         assert!(spec.validate().is_ok());
