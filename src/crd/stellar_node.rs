@@ -4,6 +4,7 @@
 //! Supports Validator (Core), Horizon API, and Soroban RPC node types.
 
 use k8s_openapi::apimachinery::pkg::apis::meta::v1::ObjectMeta;
+use k8s_openapi::apimachinery::pkg::util::intstr::IntOrString;
 use kube::CustomResource;
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
@@ -173,6 +174,18 @@ pub struct StellarNodeSpec {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub ingress: Option<IngressConfig>,
 
+    /// Load balancer configuration for external access (e.g. MetalLB)
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub load_balancer: Option<LoadBalancerConfig>,
+
+    /// Global discovery configuration for cross-cluster discovery
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub global_discovery: Option<GlobalDiscoveryConfig>,
+
+    /// Cross-cluster configuration for multi-cluster federation
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub cross_cluster: Option<CrossClusterConfig>,
+
     /// Rollout strategy for updates (RollingUpdate or Canary)
     #[serde(default)]
     pub strategy: RolloutStrategy,
@@ -244,6 +257,9 @@ impl StellarNodeSpec {
     /// # managed_database: None,
     /// # autoscaling: None,
     /// # ingress: None,
+    /// # load_balancer: None,
+    /// # global_discovery: None,
+    /// # cross_cluster: None,
     /// # strategy: Default::default(),
     /// # maintenance_mode: false,
     /// # network_policy: None,
