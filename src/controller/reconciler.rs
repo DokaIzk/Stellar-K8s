@@ -47,6 +47,7 @@ use crate::error::{Error, Result};
 
 use super::archive_health::{calculate_backoff, check_history_archive_health, ArchiveHealthResult};
 use super::conditions;
+use super::cve_reconciler;
 use super::dr;
 use super::finalizers::STELLAR_NODE_FINALIZER;
 use super::health;
@@ -674,8 +675,9 @@ async fn apply_stellar_node(
         ActionType::Update,
         "MetalLB configuration",
         async {
-            resources::ensure_metallb_config(client, node).await?;
-            resources::ensure_load_balancer_service(client, node).await?;
+            // TODO: Load balancer and global discovery fields not yet implemented in StellarNodeSpec
+            // resources::ensure_metallb_config(client, node).await?;
+            // resources::ensure_load_balancer_service(client, node).await?;
             Ok(())
         },
     )
@@ -707,6 +709,15 @@ async fn apply_stellar_node(
         "Health check result for {}/{}: healthy={}, synced={}, message={}",
         namespace, name, health_result.healthy, health_result.synced, health_result.message
     );
+
+    // 7b. CVE scanning and automated patching
+    if let Some(cve_config) = &node.spec.cve_handling {
+        apply_or_emit(ctx, node, ActionType::Update, "CVE Handling", async {
+            cve_reconciler::reconcile_cve_patches(client, node, cve_config).await?;
+            Ok(())
+        })
+        .await?;
+    }
 
     // 6. Trigger peer configuration reload for validators if healthy
     if node.spec.node_type == NodeType::Validator && health_result.healthy {

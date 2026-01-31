@@ -136,7 +136,10 @@ pub struct StellarNodeSpec {
     pub topology_spread_constraints:
         Option<Vec<k8s_openapi::api::core::v1::TopologySpreadConstraint>>,
 
+    /// CVE handling configuration for automated patching
+    /// Enables scanning for vulnerabilities and automatic rollout of patched versions
     #[serde(skip_serializing_if = "Option::is_none")]
+    pub cve_handling: Option<super::types::CVEHandlingConfig>,
     #[schemars(skip)]
     pub resource_meta: Option<ObjectMeta>,
 }
@@ -233,6 +236,14 @@ impl StellarNodeSpec {
                         "validatorConfig is required for Validator nodes",
                         "Add a spec.validatorConfig section with the required validator settings when nodeType is Validator.",
                     ));
+                } else if let Some(vc) = &self.validator_config {
+                    if vc.enable_history_archive && vc.history_archive_urls.is_empty() {
+                        errors.push(SpecValidationError::new(
+                            "spec.validatorConfig.historyArchiveUrls",
+                            "historyArchiveUrls must not be empty when enableHistoryArchive is true",
+                            "Provide at least one valid history archive URL in spec.validatorConfig.historyArchiveUrls when enableHistoryArchive is true.",
+                        ));
+                    }
                 }
 
                 // Exactly 1 replica required
@@ -241,6 +252,20 @@ impl StellarNodeSpec {
                         "spec.replicas",
                         "Validator nodes must have exactly 1 replica",
                         "Set spec.replicas to 1 for Validator nodes.",
+                    ));
+                }
+                if self.min_available.is_some() || self.max_unavailable.is_some() {
+                    errors.push(SpecValidationError::new(
+                        "spec.minAvailable / spec.maxUnavailable",
+                        "PDB configuration is not supported for Validator nodes (replicas must be 1)",
+                        "Remove PodDisruptionBudget fields (minAvailable/maxUnavailable) for Validator nodes; they must always have exactly 1 replica.",
+                    ));
+                }
+                if self.autoscaling.is_some() {
+                    errors.push(SpecValidationError::new(
+                        "spec.autoscaling",
+                        "autoscaling is not supported for Validator nodes",
+                        "Remove spec.autoscaling when nodeType is Validator; autoscaling is only supported for Horizon and SorobanRpc.",
                     ));
                 }
 
@@ -252,6 +277,11 @@ impl StellarNodeSpec {
                         "Remove spec.ingress for Validator nodes; expose Validator nodes using peer discovery or other supported mechanisms.",
                     ));
                 }
+                if matches!(self.strategy, RolloutStrategy::Canary(_)) {
+                    errors.push(SpecValidationError::new(
+                        "spec.strategy",
+                        "Canary rollout is not supported for Validator nodes",
+                        "Use a non-canary rollout strategy (e.g., RollingUpdate) for Validator nodes.",
 
                 // Autoscaling not supported
                 if self.autoscaling.is_some() {
@@ -293,10 +323,8 @@ impl StellarNodeSpec {
                         "Add a spec.horizonConfig section with the required Horizon settings when nodeType is Horizon.",
                     ));
                 }
-
-                // Validate autoscaling if present
                 if let Some(ref autoscaling) = self.autoscaling {
-                    if autoscaling.min_replicas == 0 {
+                    if autoscaling.min_replicas < 1 {
                         errors.push(SpecValidationError::new(
                             "spec.autoscaling.minReplicas",
                             "autoscaling.minReplicas must be at least 1",
@@ -311,9 +339,7 @@ impl StellarNodeSpec {
                         ));
                     }
                 }
-
-                // Validate ingress if present
-                if let Some(ref ingress) = self.ingress {
+                if let Some(ingress) = &self.ingress {
                     validate_ingress(ingress, &mut errors);
                 }
             }
@@ -326,10 +352,8 @@ impl StellarNodeSpec {
                         "Add a spec.sorobanConfig section with the required Soroban RPC settings when nodeType is SorobanRpc.",
                     ));
                 }
-
-                // Validate autoscaling if present
                 if let Some(ref autoscaling) = self.autoscaling {
-                    if autoscaling.min_replicas == 0 {
+                    if autoscaling.min_replicas < 1 {
                         errors.push(SpecValidationError::new(
                             "spec.autoscaling.minReplicas",
                             "autoscaling.minReplicas must be at least 1",
@@ -343,6 +367,9 @@ impl StellarNodeSpec {
                             "Set spec.autoscaling.maxReplicas to be greater than or equal to minReplicas.",
                         ));
                     }
+                }
+                if let Some(ingress) = &self.ingress {
+                    validate_ingress(ingress, &mut errors);
                 }
             }
         }
@@ -377,6 +404,7 @@ impl StellarNodeSpec {
         self.storage.retention_policy == RetentionPolicy::Delete
     }
 }
+#[allow(dead_code)]
 fn validate_ingress(ingress: &IngressConfig, errors: &mut Vec<SpecValidationError>) {
     if ingress.hosts.is_empty() {
         errors.push(SpecValidationError::new(
@@ -943,6 +971,8 @@ mod tests {
             managed_database: None,
             autoscaling: None,
             ingress: None,
+            load_balancer: None,
+            global_discovery: None,
             strategy: RolloutStrategy::Canary(CanaryConfig {
                 weight: 10,
                 check_interval_seconds: 300,
@@ -954,6 +984,7 @@ mod tests {
             load_balancer: None,
             global_discovery: None,
             cross_cluster: None,
+            cve_handling: None,
             resource_meta: None,
         };
 
@@ -988,6 +1019,8 @@ mod tests {
             managed_database: None,
             autoscaling: None,
             ingress: None,
+            load_balancer: None,
+            global_discovery: None,
             strategy: RolloutStrategy::Canary(CanaryConfig {
                 weight: 20,
                 check_interval_seconds: 300,
@@ -996,9 +1029,8 @@ mod tests {
             network_policy: None,
             dr_config: None,
             topology_spread_constraints: None,
-            load_balancer: None,
-            global_discovery: None,
             cross_cluster: None,
+            cve_handling: None,
             resource_meta: None,
         };
 

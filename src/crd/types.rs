@@ -1705,6 +1705,79 @@ pub enum LatencyMeasurementMethod {
     /// gRPC health check
     GRPC,
 }
+// ============================================================================
+// CVE Handling Configuration
+// ============================================================================
+#[derive(Clone, Debug, Deserialize, Serialize, JsonSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct CVEHandlingConfig {
+    /// Enable automatic CVE scanning and patching (default: true)
+    #[serde(default = "default_cve_enabled")]
+    pub enabled: bool,
+
+    /// Interval in seconds between image scans (default: 3600 = 1 hour)
+    #[serde(default = "default_cve_scan_interval")]
+    pub scan_interval_secs: u64,
+
+    /// Only patch critical vulnerabilities, ignore medium/low (default: false)
+    #[serde(default)]
+    pub critical_only: bool,
+
+    /// Maximum time in seconds to wait for canary tests to pass (default: 300 = 5 minutes)
+    #[serde(default = "default_canary_timeout")]
+    pub canary_test_timeout_secs: u64,
+
+    /// Minimum pass rate (0-100) required for canary tests before proceeding with rollout (default: 100)
+    #[serde(default = "default_canary_pass_rate")]
+    pub canary_pass_rate_threshold: f64,
+
+    /// Enable automatic rollback if consensus health degrades during rollout (default: true)
+    #[serde(default = "default_enable_rollback")]
+    pub enable_auto_rollback: bool,
+
+    /// Consensus health threshold (0-1) below which rollback is triggered (default: 0.95)
+    /// If current health < (baseline * threshold), rollback is initiated
+    #[serde(default = "default_health_threshold")]
+    pub consensus_health_threshold: f64,
+}
+
+fn default_cve_enabled() -> bool {
+    true
+}
+
+fn default_cve_scan_interval() -> u64 {
+    3600 // 1 hour
+}
+
+fn default_canary_timeout() -> u64 {
+    300 // 5 minutes
+}
+
+fn default_canary_pass_rate() -> f64 {
+    100.0
+}
+
+fn default_enable_rollback() -> bool {
+    true
+}
+
+fn default_health_threshold() -> f64 {
+    0.95
+}
+
+impl Default for CVEHandlingConfig {
+    fn default() -> Self {
+        Self {
+            enabled: true,
+            scan_interval_secs: 3600,
+            critical_only: false,
+            canary_test_timeout_secs: 300,
+            canary_pass_rate_threshold: 100.0,
+            enable_auto_rollback: true,
+            consensus_health_threshold: 0.95,
+        }
+    }
+}
 
 // ============================================================================
 // CloudNativePG Managed Database Configuration
