@@ -35,7 +35,6 @@ use crate::error::{Error, Result};
 const VPA_GROUP: &str = "autoscaling.k8s.io";
 const VPA_VERSION: &str = "v1";
 const VPA_KIND: &str = "VerticalPodAutoscaler";
-const VPA_PLURAL: &str = "verticalpodautoscalers";
 const FIELD_MANAGER: &str = "stellar-operator";
 
 // ---------------------------------------------------------------------------
