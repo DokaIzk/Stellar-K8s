@@ -46,8 +46,8 @@ use crate::crd::{
 use crate::error::{Error, Result};
 
 use super::archive_health::{
-    calculate_backoff, check_archive_integrity, check_history_archive_health,
-    ArchiveHealthResult, ARCHIVE_LAG_THRESHOLD,
+    calculate_backoff, check_archive_integrity, check_history_archive_health, ArchiveHealthResult,
+    ARCHIVE_LAG_THRESHOLD,
 };
 use super::conditions;
 use super::cve_reconciler;
@@ -57,9 +57,11 @@ use super::health;
 #[cfg(feature = "metrics")]
 use super::metrics;
 use super::mtls;
+use super::oci_snapshot;
 use super::peer_discovery;
 use super::remediation;
 use super::resources;
+use super::service_mesh;
 use super::vpa as vpa_controller;
 use super::vsl;
 
@@ -564,8 +566,7 @@ pub(crate) async fn apply_stellar_node(
                 let should_run = match last_check_time {
                     None => true, // never checked
                     Some(last) => {
-                        let age_secs =
-                            (chrono::Utc::now() - last).num_seconds();
+                        let age_secs = (chrono::Utc::now() - last).num_seconds();
                         age_secs >= ARCHIVE_CHECK_INTERVAL_SECS
                     }
                 };
@@ -983,7 +984,73 @@ pub(crate) async fn apply_stellar_node(
         }
     }
 
-    // 10. Update status to Running with ready replica count
+    // 11. OCI snapshot push/pull Jobs
+    if let Some(oci_cfg) = &node.spec.oci_snapshot {
+        if oci_cfg.enabled {
+            let ledger_seq = node
+                .status
+                .as_ref()
+                .and_then(|s| s.ledger_sequence)
+                .unwrap_or(0);
+
+            // Push: trigger when node is healthy, synced, and we have a ledger number.
+            if oci_cfg.push && health_result.healthy && health_result.synced && ledger_seq > 0 {
+                if let Err(e) =
+                    oci_snapshot::ensure_snapshot_push_job(client, node, oci_cfg, ledger_seq).await
+                {
+                    warn!(
+                        "Failed to create OCI snapshot push Job for {}/{}: {}",
+                        namespace, name, e
+                    );
+                    emit_event(
+                        client,
+                        node,
+                        "Warning",
+                        "OciSnapshotPushFailed",
+                        &format!("Could not create snapshot push Job: {e}"),
+                    )
+                    .await
+                    .ok();
+                }
+            }
+
+            // Pull: trigger on bootstrap when the node has never synced (ledger_seq == 0).
+            // This extracts a prior snapshot so the node doesn't need a full catchup.
+            if oci_cfg.pull && ledger_seq == 0 {
+                if let Err(e) =
+                    oci_snapshot::ensure_snapshot_pull_job(client, node, oci_cfg, 0).await
+                {
+                    warn!(
+                        "Failed to create OCI snapshot pull Job for {}/{}: {}",
+                        namespace, name, e
+                    );
+                    emit_event(
+                        client,
+                        node,
+                        "Warning",
+                        "OciSnapshotPullFailed",
+                        &format!("Could not create snapshot pull Job: {e}"),
+                    )
+                    .await
+                    .ok();
+                }
+            }
+        }
+    }
+
+    // 12. Service Mesh Configuration (Istio/Linkerd)
+    if node.spec.service_mesh.is_some() {
+        apply_or_emit(ctx, node, ActionType::Update, "Service Mesh (Istio/Linkerd)", async {
+            service_mesh::ensure_peer_authentication(client, node).await?;
+            service_mesh::ensure_destination_rule(client, node).await?;
+            service_mesh::ensure_virtual_service(client, node).await?;
+            service_mesh::ensure_request_authentication(client, node).await?;
+            Ok(())
+        })
+        .await?;
+    }
+
+    // 13. Update status to Running with ready replica count
     Ok(Action::requeue(Duration::from_secs(if phase == "Ready" {
         60
     } else {
@@ -1086,7 +1153,16 @@ pub(crate) async fn cleanup_stellar_node(
     )
     .await?;
 
-    // 3c. Delete PDB
+    // 3c. Delete Service Mesh Resources (Istio/Linkerd)
+    apply_or_emit(ctx, node, ActionType::Delete, "Service Mesh", async {
+        if let Err(e) = service_mesh::delete_service_mesh_resources(client, node).await {
+            warn!("Failed to delete service mesh resources: {:?}", e);
+        }
+        Ok(())
+    })
+    .await?;
+
+    // 3d. Delete PDB
     apply_or_emit(ctx, node, ActionType::Delete, "PDB", async {
         if let Err(e) = resources::delete_pdb(client, node).await {
             warn!("Failed to delete PodDisruptionBudget: {:?}", e);
@@ -1575,11 +1651,7 @@ async fn run_archive_integrity_check(
     // Determine the overall worst-case lag across all archives.
     let degraded_archives: Vec<_> = results.iter().filter(|r| !r.is_healthy()).collect();
     let any_degraded = !degraded_archives.is_empty();
-    let max_lag = results
-        .iter()
-        .filter_map(|r| r.lag)
-        .max()
-        .unwrap_or(0);
+    let max_lag = results.iter().filter_map(|r| r.lag).max().unwrap_or(0);
 
     // Update Prometheus metric with the maximum observed lag.
     #[cfg(feature = "metrics")]

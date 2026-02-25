@@ -22,10 +22,12 @@ mod health_test;
 #[cfg(feature = "metrics")]
 pub mod metrics;
 pub mod mtls;
+pub mod oci_snapshot;
 pub mod peer_discovery;
 #[cfg(test)]
 mod peer_discovery_test;
 pub mod read_pool;
+pub mod service_mesh;
 mod reconciler;
 #[cfg(test)]
 mod reconciler_test;
@@ -40,8 +42,8 @@ pub mod vpa;
 mod vsl;
 
 pub use archive_health::{
-    calculate_backoff, check_archive_integrity, check_history_archive_health,
-    ArchiveHealthResult, ArchiveIntegrityResult, ARCHIVE_LAG_THRESHOLD,
+    calculate_backoff, check_archive_integrity, check_history_archive_health, ArchiveHealthResult,
+    ArchiveIntegrityResult, ARCHIVE_LAG_THRESHOLD,
 };
 pub use cross_cluster::{check_peer_latency, ensure_cross_cluster_services, PeerLatencyStatus};
 pub use cve_reconciler::reconcile_cve_patches;
@@ -53,3 +55,7 @@ pub use peer_discovery::{
 };
 pub use reconciler::{run_controller, ControllerState};
 pub use remediation::{can_remediate, check_stale_node, RemediationLevel, StaleCheckResult};
+pub use service_mesh::{
+    delete_service_mesh_resources, ensure_destination_rule, ensure_peer_authentication,
+    ensure_request_authentication, ensure_virtual_service,
+};

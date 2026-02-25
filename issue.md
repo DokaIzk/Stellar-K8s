@@ -1,11 +1,11 @@
-History archives are the backbone of Stellar's decentralized history. We need a controller that periodically verifies the integrity of these archives by checking for stale ledgers or missing checkpoints.
+#234 Service Mesh Integration: Istio/Linkerd mTLS Enforcement
+Repo Avatar
+OtowoOrg/Stellar-K8s
+🔴 Difficulty: High (200 Points)
+Move beyond basic K8s networking and integrate with a Service Mesh for advanced traffic control and mTLS.
 
 ✅ Acceptance Criteria
-Add a new ArchiveCheck routine in the operator (or integrate into archive_health.rs).
-Periodically (every 1 hour) download the stellar-history.json from the configured historyArchiveUrls.
-Compare the ledger sequence in the archive with the actual network state.
-If the archive is lagging significantly, update the StellarNodeStatus with a Degraded condition and fire a Prometheus alert.
-Unit test the edge cases (archive unreachable, malformed JSON, sync lag detection).
-📚 Resources
-src/controller/archive_health.rs
-Stellar History Archives
+Provide PeerAuthentication and DestinationRule manifests for Istio.
+Ensure the operator is compatible with sidecar injection.
+Implement circuit breaking and retries for cross-node communication via the mesh config.
+Verify through E2E tests that all traffic is encrypted and authenticated via the mesh.

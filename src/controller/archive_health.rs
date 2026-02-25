@@ -193,7 +193,9 @@ pub struct ArchiveIntegrityResult {
 impl ArchiveIntegrityResult {
     /// Returns `true` when the archive is reachable and its lag is below the threshold
     pub fn is_healthy(&self) -> bool {
-        self.lag.map(|l| l <= ARCHIVE_LAG_THRESHOLD).unwrap_or(false)
+        self.lag
+            .map(|l| l <= ARCHIVE_LAG_THRESHOLD)
+            .unwrap_or(false)
     }
 
     /// Human-readable summary for status conditions
@@ -221,11 +223,7 @@ impl ArchiveIntegrityResult {
 }
 
 /// Fetch and parse the `stellar-history.json` from a single archive URL
-async fn fetch_archive_ledger(
-    client: &Client,
-    url: &str,
-    timeout: Duration,
-) -> Result<u64> {
+async fn fetch_archive_ledger(client: &Client, url: &str, timeout: Duration) -> Result<u64> {
     let base_url = url.trim_end_matches('/');
     let json_url = format!("{base_url}/.well-known/stellar-history.json");
 
@@ -246,10 +244,11 @@ async fn fetch_archive_ledger(
         )));
     }
 
-    let history: StellarHistoryJson =
-        resp.json().await.map_err(|e| {
-            Error::ArchiveHealthCheckError(format!("malformed stellar-history.json from {json_url}: {e}"))
-        })?;
+    let history: StellarHistoryJson = resp.json().await.map_err(|e| {
+        Error::ArchiveHealthCheckError(format!(
+            "malformed stellar-history.json from {json_url}: {e}"
+        ))
+    })?;
 
     Ok(history.current_ledger)
 }
@@ -281,7 +280,10 @@ pub async fn check_archive_integrity(
     {
         Ok(c) => c,
         Err(e) => {
-            warn!("Failed to build HTTP client for archive integrity check: {}", e);
+            warn!(
+                "Failed to build HTTP client for archive integrity check: {}",
+                e
+            );
             return urls
                 .iter()
                 .map(|url| ArchiveIntegrityResult {
@@ -407,7 +409,10 @@ mod tests {
 
     // ── ArchiveIntegrityResult ─────────────────────────────────────────────
 
-    fn make_integrity_result(archive_ledger: Option<u64>, node_ledger: u64) -> ArchiveIntegrityResult {
+    fn make_integrity_result(
+        archive_ledger: Option<u64>,
+        node_ledger: u64,
+    ) -> ArchiveIntegrityResult {
         let lag = archive_ledger.map(|al| node_ledger.saturating_sub(al));
         let error = if archive_ledger.is_none() {
             Some("connection refused".to_string())
@@ -499,7 +504,11 @@ mod tests {
         assert!(!results[0].is_healthy());
         assert!(results[0].archive_ledger.is_none());
         assert!(results[0].error.is_some());
-        assert!(results[0].error.as_ref().unwrap().contains("malformed stellar-history.json"));
+        assert!(results[0]
+            .error
+            .as_ref()
+            .unwrap()
+            .contains("malformed stellar-history.json"));
         assert!(results[0].summary().contains("unreachable"));
     }
 
