@@ -14,6 +14,7 @@ mod cve_reconciler;
 #[cfg(test)]
 mod cve_test;
 pub mod dr;
+pub mod dr_drill;
 #[cfg(test)]
 mod dr_test;
 mod finalizers;
