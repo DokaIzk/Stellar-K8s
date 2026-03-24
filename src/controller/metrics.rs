@@ -738,18 +738,15 @@ pub fn observe_dr_drill_execution(
 }
 
 /// Set the Time to Recovery (TTR) for a DR drill
-pub fn set_dr_drill_time_to_recovery(
-    namespace: &str,
-    name: &str,
-    status: &str,
-    ttr_ms: i64,
-) {
+pub fn set_dr_drill_time_to_recovery(namespace: &str, name: &str, status: &str, ttr_ms: i64) {
     let labels = DRDrillLabels {
         namespace: namespace.to_string(),
         name: name.to_string(),
         status: status.to_string(),
     };
-    DR_DRILL_TIME_TO_RECOVERY_MS.get_or_create(&labels).set(ttr_ms);
+    DR_DRILL_TIME_TO_RECOVERY_MS
+        .get_or_create(&labels)
+        .set(ttr_ms);
 }
 
 #[cfg(test)]

@@ -1035,7 +1035,12 @@ pub(crate) async fn apply_stellar_node(
     // 8. Disaster Recovery reconciliation
     if let Some(mut dr_status) = dr::reconcile_dr(client, node).await? {
         // 8a. Check if DR drill should be executed
-        if let Some(drill_config) = &node.spec.dr_config.as_ref().and_then(|c| c.drill_schedule.clone()) {
+        if let Some(drill_config) = &node
+            .spec
+            .dr_config
+            .as_ref()
+            .and_then(|c| c.drill_schedule.clone())
+        {
             if dr_drill::should_run_drill(node, drill_config) {
                 match dr_drill::execute_dr_drill(client, node, drill_config, &dr_status).await {
                     Ok(drill_result) => {
