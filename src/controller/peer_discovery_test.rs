@@ -604,8 +604,7 @@ mod dns_resolver_tests {
 
     #[tokio::test]
     async fn test_dns_nxdomain_produces_empty_peer_list_via_fallback() {
-        let resolver =
-            MockDnsResolver::new().add_nxdomain("gone.stellar-system.svc.cluster.local");
+        let resolver = MockDnsResolver::new().add_nxdomain("gone.stellar-system.svc.cluster.local");
 
         // Callers should treat NotFound as "no peers available" rather than a
         // hard failure – mirror the same pattern used in extract_peer_info.
@@ -635,8 +634,7 @@ mod dns_resolver_tests {
 
     #[tokio::test]
     async fn test_dns_timeout_returns_timeout_error() {
-        let resolver =
-            MockDnsResolver::new().add_timeout("slow.stellar-system.svc.cluster.local");
+        let resolver = MockDnsResolver::new().add_timeout("slow.stellar-system.svc.cluster.local");
 
         let result = resolver
             .resolve("slow.stellar-system.svc.cluster.local")
@@ -662,8 +660,7 @@ mod dns_resolver_tests {
 
     #[tokio::test]
     async fn test_dns_timeout_produces_empty_peer_list_via_fallback() {
-        let resolver =
-            MockDnsResolver::new().add_timeout("slow.stellar-system.svc.cluster.local");
+        let resolver = MockDnsResolver::new().add_timeout("slow.stellar-system.svc.cluster.local");
 
         let peers =
             match resolve_to_peers(&resolver, "slow.stellar-system.svc.cluster.local", 11625).await
