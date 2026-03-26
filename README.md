@@ -50,6 +50,25 @@ Stellar-K8s follows the **Operator Pattern**, extending Kubernetes with a `Stell
 
 Get a Testnet node running in under 5 minutes.
 
+### Option 1: Docker Compose (No K8s Required)
+
+Perfect for local development and testing without a full Kubernetes cluster:
+
+```bash
+# Start the development environment
+make compose-up
+
+# View logs
+make compose-logs
+
+# Stop the environment
+make compose-down
+```
+
+See the [Docker Compose Quickstart Guide](docs/docker-compose-quickstart.md) for detailed instructions.
+
+### Option 2: Kubernetes Cluster
+
 ### 1. Install the Operator via Helm
 
 ```bash

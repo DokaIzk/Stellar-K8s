@@ -1,4 +1,4 @@
-.PHONY: help build test fmt lint clean docker-build install-crd apply-samples dev-setup ci-local benchmark benchmark-webhook benchmark-webhook-health benchmark-webhook-compare benchmark-webhook-save benchmark-all run-dev
+.PHONY: help build test fmt lint clean docker-build install-crd apply-samples dev-setup ci-local benchmark benchmark-webhook benchmark-webhook-health benchmark-webhook-compare benchmark-webhook-save benchmark-all run-dev compose-up compose-dev compose-down compose-logs
 
 # Default target
 .DEFAULT_GOAL := help
@@ -124,3 +124,20 @@ bundle-build: ## Build the bundle image.
 	docker build -f bundle.Dockerfile -t $(BUNDLE_IMG) .
 
 all: ci-local docker-build ## Full build pipeline
+
+# Docker Compose targets
+compose-up: ## Start Docker Compose development environment
+	@echo "→ Starting Docker Compose environment..."
+	@docker-compose up -d
+	@echo "✓ Environment started. Use 'make compose-logs' to view logs"
+
+compose-dev: ## Start Docker Compose with hot-reloading
+	@echo "→ Starting Docker Compose with hot-reloading..."
+	@docker-compose -f docker-compose.yml -f docker-compose.dev.yml up
+
+compose-down: ## Stop Docker Compose environment
+	@echo "→ Stopping Docker Compose environment..."
+	@docker-compose down
+
+compose-logs: ## View Docker Compose logs
+	@docker-compose logs -f stellar-operator
