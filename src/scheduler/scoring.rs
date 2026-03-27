@@ -728,9 +728,7 @@ threshold = 3"#;
 
         assert!(
             score_near > score_far,
-            "same-region node (lower latency) must score higher: {} vs {}",
-            score_near,
-            score_far
+            "same-region node (lower latency) must score higher: {score_near} vs {score_far}"
         );
     }
 
@@ -749,8 +747,7 @@ threshold = 3"#;
 
         assert!(
             score <= -1000,
-            "placing on the same node must incur at least -1000 anti-affinity penalty: score={}",
-            score
+            "placing on the same node must incur at least -1000 anti-affinity penalty: score={score}"
         );
     }
 
@@ -774,9 +771,7 @@ threshold = 3"#;
 
         assert!(
             score_diff > score_same,
-            "different zone should score higher than same zone for redundancy: {} vs {}",
-            score_diff,
-            score_same
+            "different zone should score higher than same zone for redundancy: {score_diff} vs {score_same}"
         );
     }
 
@@ -792,7 +787,7 @@ threshold = 3"#;
     #[test]
     fn test_single_candidate_is_selected_when_no_peers() {
         let node = make_node("only-node", vec![]);
-        let candidates = vec![&node];
+        let candidates = [&node];
         assert_eq!(
             candidates
                 .first()
@@ -835,10 +830,8 @@ threshold = 3"#;
         let latency_ms: u32 = 200;
         let threshold_ms: u32 = 150;
         assert!(
-            !(latency_ms <= threshold_ms),
-            "latency {}ms exceeds threshold {}ms and must be considered unhealthy",
-            latency_ms,
-            threshold_ms
+            latency_ms > threshold_ms,
+            "latency {latency_ms}ms exceeds threshold {threshold_ms}ms and must be considered unhealthy"
         );
     }
 
@@ -848,9 +841,7 @@ threshold = 3"#;
         let threshold_ms: u32 = 150;
         assert!(
             latency_ms <= threshold_ms,
-            "latency {}ms within threshold {}ms must be considered healthy",
-            latency_ms,
-            threshold_ms
+            "latency {latency_ms}ms within threshold {threshold_ms}ms must be considered healthy"
         );
     }
 

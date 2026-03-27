@@ -485,12 +485,8 @@ pub struct PeerLatencyStatus {
 mod tests {
     use super::*;
     use crate::crd::{
-        types::{
-            NodeType, PodAntiAffinityStrength, ResourceRequirements, ResourceSpec, RetentionPolicy,
-            RolloutStrategy, StellarNetwork, StorageConfig, StorageMode,
-        },
-        CrossClusterConfig, CrossClusterMode, ExternalNameConfig, PeerClusterConfig, StellarNode,
-        StellarNodeSpec,
+        types::{NodeType, ResourceRequirements, ResourceSpec, StellarNetwork, StorageConfig},
+        CrossClusterConfig, PeerClusterConfig, StellarNode, StellarNodeSpec,
     };
     use k8s_openapi::apimachinery::pkg::apis::meta::v1::ObjectMeta;
 
@@ -695,8 +691,7 @@ mod tests {
         };
         assert!(
             !status.healthy,
-            "peer with latency {}ms exceeding threshold {}ms must be unhealthy",
-            latency, threshold
+            "peer with latency {latency}ms exceeding threshold {threshold}ms must be unhealthy"
         );
     }
 
@@ -794,7 +789,7 @@ mod tests {
     #[test]
     fn test_disabled_peer_is_skipped_in_external_name_services() {
         // Verify that disabled peers are not processed.
-        let peers = vec![
+        let peers = [
             PeerClusterConfig {
                 enabled: false,
                 ..make_peer("cluster-disabled", "10.0.0.1")
