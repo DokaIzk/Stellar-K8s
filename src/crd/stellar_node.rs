@@ -362,7 +362,8 @@ impl StellarNodeSpec {
                                         "Configure exactly one of localRef, externalRef, csiRef, or vaultRef.",
                                     ));
                                 } else {
-                                    let uses_k8s_secret = src.local_ref.is_some() || src.external_ref.is_some();
+                                    let uses_k8s_secret =
+                                        src.local_ref.is_some() || src.external_ref.is_some();
                                     if uses_k8s_secret {
                                         errors.push(SpecValidationError::new(
                                             "spec.validatorConfig.seedSecretSource",

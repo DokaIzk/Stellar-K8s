@@ -85,4 +85,3 @@ mod tests {
         assert_eq!(t.get_mean_uptime("p2").unwrap(), 0.0);
     }
 }
-

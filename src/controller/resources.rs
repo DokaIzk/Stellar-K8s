@@ -1348,7 +1348,9 @@ fn build_pod_template(
                     containers.push(Container {
                         name: "dedicatedhsm-client".to_string(),
                         image: Some("azure/dedicated-hsm-client:latest".to_string()),
-                        command: Some(vec!["/opt/dedicatedhsm/bin/dedicatedhsm_client".to_string()]),
+                        command: Some(
+                            vec!["/opt/dedicatedhsm/bin/dedicatedhsm_client".to_string()],
+                        ),
                         args: Some(vec!["--foreground".to_string()]),
                         volume_mounts: Some(vec![VolumeMount {
                             name: "dedicatedhsm-socket".to_string(),

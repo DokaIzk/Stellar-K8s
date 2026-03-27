@@ -164,7 +164,10 @@ impl QuorumAnalyzer {
             let graph = QuorumGraph::from_quorum_sets(quorum_sets.clone());
             let critical_analysis = graph.find_critical_nodes();
             let overlap_analysis = graph.calculate_overlaps();
-            (critical_analysis.critical_nodes, overlap_analysis.min_overlap)
+            (
+                critical_analysis.critical_nodes,
+                overlap_analysis.min_overlap,
+            )
         };
 
         // Get latency variance
@@ -273,13 +276,14 @@ impl QuorumAnalyzer {
         const MAX_LATENCY_MS: f64 = 500.0;
         const LATENCY_SCORE_SCALE_MS: f64 = 200.0;
 
-        let baseline_qset = quorum_sets
-            .iter()
-            .map(|(_, q)| q)
-            .max_by_key(|q| {
-                let inner = q.inner_sets.iter().map(|i| i.validators.len()).sum::<usize>();
-                q.validators.len() + inner
-            })?;
+        let baseline_qset = quorum_sets.iter().map(|(_, q)| q).max_by_key(|q| {
+            let inner = q
+                .inner_sets
+                .iter()
+                .map(|i| i.validators.len())
+                .sum::<usize>();
+            q.validators.len() + inner
+        })?;
 
         // Flatten direct validators + inner-set validators into a single peer list.
         let mut baseline_validators: Vec<String> = baseline_qset.validators.clone();
@@ -296,10 +300,7 @@ impl QuorumAnalyzer {
         // Identify baseline unhealthy peers.
         let mut unhealthy_peers = Vec::new();
         for peer_id in &baseline_validators {
-            let uptime_mean = self
-                .uptime_tracker
-                .get_mean_uptime(peer_id)
-                .unwrap_or(0.0);
+            let uptime_mean = self.uptime_tracker.get_mean_uptime(peer_id).unwrap_or(0.0);
 
             let latency_mean = self
                 .latency_tracker
@@ -320,10 +321,7 @@ impl QuorumAnalyzer {
         let mut scored: Vec<(String, f64)> = all_quorum_peers
             .iter()
             .map(|peer_id| {
-                let uptime_mean = self
-                    .uptime_tracker
-                    .get_mean_uptime(peer_id)
-                    .unwrap_or(0.0);
+                let uptime_mean = self.uptime_tracker.get_mean_uptime(peer_id).unwrap_or(0.0);
 
                 let latency_mean = self
                     .latency_tracker
@@ -332,8 +330,7 @@ impl QuorumAnalyzer {
                     .unwrap_or(MAX_LATENCY_MS * 2.0);
 
                 // Convert latency into a [0,1] score (higher is better).
-                let latency_score =
-                    1.0 / (1.0 + (latency_mean / LATENCY_SCORE_SCALE_MS).max(0.0));
+                let latency_score = 1.0 / (1.0 + (latency_mean / LATENCY_SCORE_SCALE_MS).max(0.0));
 
                 // Weighted health: favor uptime, but still account for latency.
                 let health_score = 0.6 * uptime_mean + 0.4 * latency_score;
@@ -341,10 +338,7 @@ impl QuorumAnalyzer {
             })
             .collect();
 
-        scored.sort_by(|a, b| {
-            b.1.partial_cmp(&a.1)
-                .unwrap_or(std::cmp::Ordering::Equal)
-        });
+        scored.sort_by(|a, b| b.1.partial_cmp(&a.1).unwrap_or(std::cmp::Ordering::Equal));
 
         // Replace unhealthy peers while keeping the quorum peer count stable.
         let new_validators_count = baseline_validators.len();
