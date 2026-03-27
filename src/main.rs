@@ -46,6 +46,12 @@ enum Commands {
     Info(InfoArgs),
     /// Local simulator (kind/k3s + operator + demo validators)
     Simulator(SimulatorCli),
+    /// Generate shell completion scripts
+    Completions {
+        /// Shell to generate completions for
+        #[arg(value_enum)]
+        shell: clap_complete::Shell,
+    },
 }
 
 #[derive(Parser, Debug)]
@@ -289,6 +295,14 @@ async fn main() -> Result<(), Error> {
         }
         Commands::Simulator(cli) => {
             return run_simulator(cli).await;
+        }
+        Commands::Completions { shell } => {
+            use clap::CommandFactory;
+            use clap_complete::generate;
+            let mut cmd = Args::command();
+            let name = cmd.get_name().to_string();
+            generate(shell, &mut cmd, name, &mut std::io::stdout());
+            return Ok(());
         }
     }
 }
