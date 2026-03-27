@@ -1,3 +1,4 @@
+use std::process::{self};
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
 
@@ -6,6 +7,7 @@ use clap::{Parser, Subcommand};
 use k8s_openapi::api::coordination::v1::Lease;
 use k8s_openapi::apimachinery::pkg::apis::meta::v1::MicroTime;
 use kube::api::{Api, ObjectMeta, Patch, PatchParams, PostParams};
+use kube::ResourceExt;
 use stellar_k8s::{controller, crd::StellarNode, preflight, Error};
 use tracing::{debug, info, warn, Level};
 use tracing_subscriber::{fmt, prelude::*, EnvFilter};
@@ -45,6 +47,12 @@ enum Commands {
     Info(InfoArgs),
     /// Local simulator (kind/k3s + operator + demo validators)
     Simulator(SimulatorCli),
+    /// Generate shell completion scripts
+    Completions {
+        /// Shell to generate completions for
+        #[arg(value_enum)]
+        shell: clap_complete::Shell,
+    },
 }
 
 #[derive(Parser, Debug)]
@@ -79,6 +87,17 @@ struct RunArgs {
     /// Example: --namespace stellar-system
     #[arg(long, env = "OPERATOR_NAMESPACE", default_value = "default")]
     namespace: String,
+
+    /// Restrict the operator to only watch and manage StellarNode resources in a specific namespace.
+    ///
+    /// When unset (default), the operator watches all namespaces and requires cluster-wide RBAC.
+    /// When set, the operator only reconciles StellarNodes in this namespace and can run with
+    /// namespace-scoped RBAC (Role/RoleBinding).
+    /// Env: WATCH_NAMESPACE
+    ///
+    /// Example: --watch-namespace stellar-prod
+    #[arg(long, env = "WATCH_NAMESPACE")]
+    watch_namespace: Option<String>,
 
     /// Simulate reconciliation without applying any changes to the cluster.
     ///
@@ -260,7 +279,7 @@ async fn main() -> Result<(), Error> {
         Commands::Run(run_args) => {
             if let Err(e) = run_args.validate() {
                 eprintln!("error: {e}");
-                std::process::exit(2);
+                process::exit(2);
             }
             return run_operator(run_args).await;
         }
@@ -269,6 +288,14 @@ async fn main() -> Result<(), Error> {
         }
         Commands::Simulator(cli) => {
             return run_simulator(cli).await;
+        }
+        Commands::Completions { shell } => {
+            use clap::CommandFactory;
+            use clap_complete::generate;
+            let mut cmd = Args::command();
+            let name = cmd.get_name().to_string();
+            generate(shell, &mut cmd, name, &mut std::io::stdout());
+            return Ok(());
         }
     }
 }
@@ -458,18 +485,114 @@ spec:
 }
 
 async fn run_info(args: InfoArgs) -> Result<(), Error> {
+    use k8s_openapi::api::apps::v1::{Deployment, StatefulSet};
+    use k8s_openapi::api::core::v1::Service;
+
     // Initialize Kubernetes client
     let client = kube::Client::try_default()
         .await
         .map_err(Error::KubeError)?;
 
-    let api: kube::Api<StellarNode> = kube::Api::namespaced(client, &args.namespace);
+    let api: kube::Api<StellarNode> = kube::Api::namespaced(client.clone(), &args.namespace);
     let nodes = api
         .list(&Default::default())
         .await
         .map_err(Error::KubeError)?;
 
     println!("Managed Stellar Nodes: {}", nodes.items.len());
+    println!();
+
+    // Display detailed information for each node
+    for node in &nodes.items {
+        let name = node.name_any();
+        let node_type = format!("{:?}", node.spec.node_type);
+        let network = format!("{:?}", node.spec.network);
+        let replicas = node.spec.replicas;
+
+        println!("StellarNode: {name}");
+        println!("  Type: {node_type}");
+        println!("  Network: {network}");
+        println!("  Replicas: {replicas}");
+
+        // Find owned Deployments
+        let deployment_api: kube::Api<Deployment> =
+            kube::Api::namespaced(client.clone(), &args.namespace);
+        let label_selector =
+            format!("app.kubernetes.io/instance={name},app.kubernetes.io/name=stellar-node");
+        let deployments = deployment_api
+            .list(&kube::api::ListParams::default().labels(&label_selector))
+            .await
+            .map_err(Error::KubeError)?;
+
+        if !deployments.items.is_empty() {
+            println!("  Deployments:");
+            for deployment in &deployments.items {
+                let dep_name = deployment.metadata.name.as_deref().unwrap_or("unknown");
+                let ready = deployment
+                    .status
+                    .as_ref()
+                    .and_then(|s| s.ready_replicas)
+                    .unwrap_or(0);
+                let desired = deployment
+                    .spec
+                    .as_ref()
+                    .and_then(|s| s.replicas)
+                    .unwrap_or(0);
+                println!("    - {dep_name} ({ready}/{desired} ready)");
+            }
+        }
+
+        // Find owned StatefulSets
+        let statefulset_api: kube::Api<StatefulSet> =
+            kube::Api::namespaced(client.clone(), &args.namespace);
+        let statefulsets = statefulset_api
+            .list(&kube::api::ListParams::default().labels(&label_selector))
+            .await
+            .map_err(Error::KubeError)?;
+
+        if !statefulsets.items.is_empty() {
+            println!("  StatefulSets:");
+            for sts in &statefulsets.items {
+                let sts_name = sts.metadata.name.as_deref().unwrap_or("unknown");
+                let ready = sts
+                    .status
+                    .as_ref()
+                    .and_then(|s| s.ready_replicas)
+                    .unwrap_or(0);
+                let desired = sts.spec.as_ref().and_then(|s| s.replicas).unwrap_or(0);
+                println!("    - {sts_name} ({ready}/{desired} ready)");
+            }
+        }
+
+        // Find owned Services
+        let service_api: kube::Api<Service> =
+            kube::Api::namespaced(client.clone(), &args.namespace);
+        let services = service_api
+            .list(&kube::api::ListParams::default().labels(&label_selector))
+            .await
+            .map_err(Error::KubeError)?;
+
+        if !services.items.is_empty() {
+            println!("  Services:");
+            for service in &services.items {
+                let svc_name = service.metadata.name.as_deref().unwrap_or("unknown");
+                let svc_type = service
+                    .spec
+                    .as_ref()
+                    .and_then(|s| s.type_.as_deref())
+                    .unwrap_or("ClusterIP");
+                let cluster_ip = service
+                    .spec
+                    .as_ref()
+                    .and_then(|s| s.cluster_ip.as_deref())
+                    .unwrap_or("None");
+                println!("    - {svc_name} (type: {svc_type}, IP: {cluster_ip})");
+            }
+        }
+
+        println!();
+    }
+
     Ok(())
 }
 
@@ -538,6 +661,7 @@ async fn run_operator(args: RunArgs) -> Result<(), Error> {
         let resolved = serde_json::json!({
             "cli": {
                 "namespace": args.namespace,
+                "watch_namespace": args.watch_namespace,
                 "enable_mtls": args.enable_mtls,
                 "dry_run": args.dry_run,
                 "scheduler": args.scheduler,
@@ -581,6 +705,12 @@ async fn run_operator(args: RunArgs) -> Result<(), Error> {
         "Starting Stellar-K8s Operator v{}",
         env!("CARGO_PKG_VERSION")
     );
+
+    // Initialise operator build-info metric (Issue #301)
+    #[cfg(feature = "metrics")]
+    {
+        stellar_k8s::controller::metrics::init_operator_info();
+    }
 
     // Initialize Kubernetes client
     let client = kube::Client::try_default()
@@ -689,15 +819,35 @@ async fn run_operator(args: RunArgs) -> Result<(), Error> {
         });
     }
 
+    // Update leader-status and uptime metrics every 10 s (Issue #301)
+    #[cfg(feature = "metrics")]
+    {
+        let is_leader_metrics = Arc::clone(&is_leader);
+        tokio::spawn(async move {
+            let mut interval = tokio::time::interval(std::time::Duration::from_secs(10));
+            loop {
+                interval.tick().await;
+                let leader = is_leader_metrics.load(std::sync::atomic::Ordering::Relaxed);
+                stellar_k8s::controller::metrics::set_leader_status(leader);
+                stellar_k8s::controller::metrics::inc_uptime_seconds(10);
+            }
+        });
+    }
+
     // Create shared controller state
     let operator_config = stellar_k8s::controller::OperatorConfig::load();
     let state = Arc::new(controller::ControllerState {
         client: client.clone(),
         enable_mtls: args.enable_mtls,
         operator_namespace: args.namespace.clone(),
+        watch_namespace: args.watch_namespace.clone(),
         mtls_config: mtls_config.clone(),
         dry_run: args.dry_run,
         is_leader: Arc::clone(&is_leader),
+        event_reporter: kube::runtime::events::Reporter {
+            controller: "stellar-operator".to_string(),
+            instance: None,
+        },
         operator_config: Arc::new(operator_config),
     });
 
@@ -711,6 +861,17 @@ async fn run_operator(args: RunArgs) -> Result<(), Error> {
             tracing::error!("Peer discovery manager error: {:?}", e);
         }
     });
+
+    // Start the feature-flag watcher (watches stellar-operator-config ConfigMap)
+    let feature_flags = controller::feature_flags::new_shared();
+    {
+        let ff_client = client.clone();
+        let ff_namespace = args.namespace.clone();
+        let ff_flags = feature_flags.clone();
+        tokio::spawn(async move {
+            controller::watch_feature_flags(ff_client, ff_namespace, ff_flags).await;
+        });
+    }
 
     // Start the REST API server and optional mTLS certificate rotation
     #[cfg(feature = "rest-api")]
@@ -1052,6 +1213,12 @@ mod cli_tests {
     fn run_namespace_flag() {
         let args = parse_run(&["--namespace", "stellar-system"]).unwrap();
         assert_eq!(args.namespace, "stellar-system");
+    }
+
+    #[test]
+    fn run_watch_namespace_flag() {
+        let args = parse_run(&["--watch-namespace", "stellar-prod"]).unwrap();
+        assert_eq!(args.watch_namespace, Some("stellar-prod".to_string()));
     }
 
     #[test]

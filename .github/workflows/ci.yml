@@ -26,7 +26,7 @@ jobs:
           version: "3.14.0"
 
       - name: Lint chart with default values
-        run: helm lint charts/stellar-operator
+        run: make helm-lint
 
       - name: Lint chart with strict mode
         run: helm lint charts/stellar-operator --strict
@@ -132,11 +132,18 @@ jobs:
         with:
           shared-key: "ci-lint"
 
+      - name: Shellcheck
+        uses: ludeeus/action-shellcheck@2.0.0
+        with:
+          path_to_shell_files: .
+          severity: error
+          upload_annotation: true
+
       - name: Check formatting
-        run: cargo fmt --all --check
+        run: make fmt-check
 
       - name: Run clippy
-        run: cargo clippy --workspace --all-targets --all-features -- -D warnings
+        run: make lint
 
   test:
     name: Test
@@ -153,11 +160,8 @@ jobs:
         with:
           shared-key: "ci-test"
 
-      - name: Run tests
-        run: cargo test --workspace --all-features --verbose
-
-      - name: Run doc tests
-        run: cargo test --doc --workspace
+      - name: Run tests (Unit and Doc)
+        run: make test
 
   build:
     name: Build
@@ -175,7 +179,7 @@ jobs:
           shared-key: "ci-build"
 
       - name: Build release
-        run: cargo build --release --locked
+        run: make build
 
       - name: Upload binary artifacts
         uses: actions/upload-artifact@v4
