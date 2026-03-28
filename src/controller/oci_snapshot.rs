@@ -513,6 +513,7 @@ mod tests {
                 service_mesh: None,
                 forensic_snapshot: None,
                 read_pool_endpoint: None,
+                sidecars: None,
                 resource_meta: None,
             },
             status: None,

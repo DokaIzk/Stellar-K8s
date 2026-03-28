@@ -53,6 +53,7 @@ mod tests {
             resource_meta: None,
             vpa_config: None,
             read_pool_endpoint: None,
+            sidecars: None,
         }
     }
 
@@ -115,6 +116,7 @@ mod tests {
                 resource_meta: None,
                 vpa_config: None,
                 read_pool_endpoint: None,
+                sidecars: None,
             },
             status: None,
         }
@@ -170,6 +172,7 @@ mod tests {
                 resource_meta: None,
                 vpa_config: None,
                 read_pool_endpoint: None,
+                sidecars: None,
             },
             status: None,
         }

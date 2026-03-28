@@ -90,6 +90,8 @@ mod tests {
                 }),
                 forensic_snapshot: None,
                 read_pool_endpoint: None,
+                sidecars: None,
+PLACEHOLDER
                 resource_meta: None,
             },
             status: None,

@@ -311,6 +311,7 @@ mod tests {
             resource_meta: None,
             vpa_config: None,
             read_pool_endpoint: None,
+            sidecars: None,
         };
 
         let labels = get_standard_labels(&spec, "my-validator");
@@ -371,6 +372,7 @@ mod tests {
             resource_meta: None,
             vpa_config: None,
             read_pool_endpoint: None,
+            sidecars: None,
         };
 
         let annotations = get_standard_annotations(&spec);
