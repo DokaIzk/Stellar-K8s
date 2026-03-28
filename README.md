@@ -512,6 +512,31 @@ stellar-operator prune-archive \
 
 For comprehensive documentation, see **[docs/archive-pruning.md](docs/archive-pruning.md)**.
 
+### Live State Diff
+
+Debug operator reconciliation issues with the `diff` subcommand that shows differences between desired and actual cluster state:
+
+```bash
+# Show what differs from desired state
+stellar-operator diff --name my-validator --namespace stellar
+
+# JSON output for scripting
+stellar-operator diff --name my-validator --namespace stellar --format json
+
+# Show ConfigMap contents (stellar-core.cfg, etc.)
+stellar-operator diff --name my-validator --namespace stellar --show-config
+```
+
+**Features:**
+
+- ✅ Colored terminal output with change indicators
+- ✅ Multiple output formats (terminal, JSON, unified)
+- ✅ Compares all operator-managed resources
+- ✅ ConfigMap content inspection
+- ✅ Change detection for labels, annotations, specs
+
+For comprehensive documentation, see **[docs/diff-utility.md](docs/diff-utility.md)**.
+
 ---
 
 ## 📖 API Reference

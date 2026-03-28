@@ -42,6 +42,9 @@ anyhow = "1"
 clap = { version = "4.5", features = ["derive", "env"] }
 clap_complete = "4.5"
 
+# Diff utility
+itertools = "0.12"
+
 # Date/time handling
 chrono = { version = "0.4", features = ["serde"] }
 # Pinned to fix RUSTSEC-2026-0009 (stack exhaustion DoS); also used transitively

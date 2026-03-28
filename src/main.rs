@@ -12,6 +12,7 @@ use kube::ResourceExt;
 use stellar_k8s::infra;
 use stellar_k8s::{controller, crd::StellarNode, preflight, Error};
 use stellar_k8s::controller::archive_prune::{PruneArchiveArgs, prune_archive};
+use stellar_k8s::controller::diff::{DiffArgs, diff};
 use tracing::{debug, info, info_span, warn, Instrument, Level};
 use tracing_subscriber::{fmt, prelude::*, EnvFilter};
 
@@ -53,6 +54,8 @@ enum Commands {
     CheckCrd,
     /// Prune old history archive checkpoints
     PruneArchive(PruneArchiveArgs),
+    /// Show difference between desired and live cluster state
+    Diff(DiffArgs),
     /// Local simulator (kind/k3s + operator + demo validators)
     Simulator(SimulatorCli),
     /// Generate shell completion scripts
@@ -327,6 +330,9 @@ async fn main() -> Result<(), Error> {
         }
         Commands::PruneArchive(prune_args) => {
             return prune_archive(prune_args).await;
+        }
+        Commands::Diff(diff_args) => {
+            return diff(diff_args).await;
         }
     }
 }
