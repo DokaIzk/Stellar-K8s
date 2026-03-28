@@ -10,6 +10,7 @@ pub mod crd;
 pub mod error;
 pub mod preflight;
 pub mod scheduler;
+pub mod search;
 pub mod telemetry;
 
 #[cfg(feature = "rest-api")]

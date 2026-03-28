@@ -18,9 +18,15 @@ use super::dto::{
     NodeSummary, ProbeResponse,
 };
 
-/// Health check endpoint
+/// Get the documentation search index
 #[instrument]
-pub async fn health() -> Json<HealthResponse> {
+pub async fn get_search_index() -> axum::response::Response {
+    use crate::search::SEARCH_INDEX_JSON;
+    axum::response::Response::builder()
+        .header("Content-Type", "application/json")
+        .body(axum::body::Body::from(SEARCH_INDEX_JSON))
+        .unwrap()
+}
     Json(HealthResponse {
         status: "healthy".to_string(),
         version: env!("CARGO_PKG_VERSION").to_string(),
