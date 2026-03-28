@@ -101,17 +101,17 @@ impl StellarNetwork {
         }
         if name.len() > 63 {
             return Err(format!(
-                "customName '{}' exceeds 63 characters (maxLength: 63)",
-                name
+                "customName '{name}' exceeds 63 characters (maxLength: 63)"
             ));
         }
-        let valid = name.chars().all(|c| c.is_ascii_lowercase() || c.is_ascii_digit() || c == '-')
+        let valid = name
+            .chars()
+            .all(|c| c.is_ascii_lowercase() || c.is_ascii_digit() || c == '-')
             && name.starts_with(|c: char| c.is_ascii_lowercase() || c.is_ascii_digit())
             && name.ends_with(|c: char| c.is_ascii_lowercase() || c.is_ascii_digit());
         if !valid {
             return Err(format!(
-                "customName '{}' is invalid: must match ^[a-z0-9]([-a-z0-9]*[a-z0-9])?$ (lowercase alphanumeric and hyphens only, no leading/trailing hyphens)",
-                name
+                "customName '{name}' is invalid: must match ^[a-z0-9]([-a-z0-9]*[a-z0-9])?$ (lowercase alphanumeric and hyphens only, no leading/trailing hyphens)"
             ));
         }
         Ok(())
