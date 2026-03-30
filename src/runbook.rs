@@ -62,7 +62,7 @@ pub fn generate_runbook(node: &StellarNode) -> Result<String> {
         Utc::now().format("%Y-%m-%d %H:%M:%S UTC")
     ));
     runbook.push_str(&format!("**Node Type**: {}\n", spec.node_type));
-    runbook.push_str(&format!("**Network**: {}\n\n", spec.network));
+    runbook.push_str(&format!("**Network**: {:?}\n\n", spec.network));
 
     // Quick Status Section
     runbook.push_str("## Quick Status Check\n\n");
@@ -441,7 +441,7 @@ fn generate_network_troubleshooting(node: &StellarNode) -> Result<String> {
     runbook.push_str("## Network Troubleshooting\n\n");
 
     runbook.push_str("### Network Information\n\n");
-    runbook.push_str(&format!("- **Network**: {}\n", spec.network));
+    runbook.push_str(&format!("- **Network**: {:?}\n", spec.network));
     runbook.push_str(&format!("- **Network Passphrase**: {}\n\n", spec.network.passphrase()));
 
     runbook.push_str("### 1. Check Service\n\n");
