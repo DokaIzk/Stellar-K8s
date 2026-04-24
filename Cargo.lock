@@ -2441,8 +2441,13 @@ dependencies = [
  "form_urlencoded",
  "http 1.4.0",
  "json-patch",
+<<<<<<< four-issues
  "k8s-openapi",
  "schemars",
+=======
+ "k8s-openapi 0.22.0",
+ "schemars 0.8.22",
+>>>>>>> main
  "serde",
  "serde-value",
  "serde_json",

@@ -60,6 +60,7 @@ mod stellar_node_spec_validation {
             sidecars: None,
             custom_network_passphrase: None,
             nat_traversal: None,
+            cross_cloud_failover: None,
         }
     }
 
@@ -114,6 +115,7 @@ mod stellar_node_spec_validation {
             sidecars: None,
             custom_network_passphrase: None,
             nat_traversal: None,
+            cross_cloud_failover: None,
         }
     }
 
@@ -166,6 +168,10 @@ mod stellar_node_spec_validation {
             sidecars: None,
             custom_network_passphrase: None,
             nat_traversal: None,
+<<<<<<< four-issues
+=======
+            cross_cloud_failover: None,
+>>>>>>> main
         }
     }
 
