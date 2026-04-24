@@ -1302,7 +1302,7 @@ fn build_pod_template(
             Volume {
                 name: "config".to_string(),
                 config_map: Some(k8s_openapi::api::core::v1::ConfigMapVolumeSource {
-                    name: Some(resource_name(node, "config")),
+                    name: resource_name(node, "config"),
                     ..Default::default()
                 }),
                 ..Default::default()
@@ -1315,6 +1315,9 @@ fn build_pod_template(
         affinity: merge_workload_affinity(node),
         security_context: Some(PodSecurityContext {
             run_as_non_root: Some(true),
+            run_as_user: Some(10000),
+            run_as_group: Some(10000),
+            fs_group: Some(10000),
             seccomp_profile: Some(SeccompProfile {
                 localhost_profile: None,
                 type_: "RuntimeDefault".to_string(),
@@ -1393,6 +1396,20 @@ fn build_pod_template(
                             mount_path: "/keys".to_string(),
                             ..Default::default()
                         }]),
+                        security_context: Some(SecurityContext {
+                            allow_privilege_escalation: Some(false),
+                            capabilities: Some(Capabilities {
+                                drop: Some(vec!["ALL".to_string()]),
+                                add: None,
+                            }),
+                            run_as_non_root: Some(true),
+                            privileged: Some(false),
+                            seccomp_profile: Some(SeccompProfile {
+                                type_: "RuntimeDefault".to_string(),
+                                localhost_profile: None,
+                            }),
+                            ..Default::default()
+                        }),
                         ..Default::default()
                     });
                 }
@@ -1436,6 +1453,20 @@ fn build_pod_template(
                             mount_path: "/var/run/cloudhsm".to_string(),
                             ..Default::default()
                         }]),
+                        security_context: Some(SecurityContext {
+                            allow_privilege_escalation: Some(false),
+                            capabilities: Some(Capabilities {
+                                drop: Some(vec!["ALL".to_string()]),
+                                add: None,
+                            }),
+                            run_as_non_root: Some(true),
+                            privileged: Some(false),
+                            seccomp_profile: Some(SeccompProfile {
+                                type_: "RuntimeDefault".to_string(),
+                                localhost_profile: None,
+                            }),
+                            ..Default::default()
+                        }),
                         ..Default::default()
                     });
                 } else if hsm_config.provider == HsmProvider::Azure {
@@ -1461,6 +1492,20 @@ fn build_pod_template(
                             mount_path: "/var/run/dedicatedhsm".to_string(),
                             ..Default::default()
                         }]),
+                        security_context: Some(SecurityContext {
+                            allow_privilege_escalation: Some(false),
+                            capabilities: Some(Capabilities {
+                                drop: Some(vec!["ALL".to_string()]),
+                                add: None,
+                            }),
+                            run_as_non_root: Some(true),
+                            privileged: Some(false),
+                            seccomp_profile: Some(SeccompProfile {
+                                type_: "RuntimeDefault".to_string(),
+                                localhost_profile: None,
+                            }),
+                            ..Default::default()
+                        }),
                         ..Default::default()
                     });
                 }
@@ -1530,6 +1575,20 @@ fn build_pod_template(
                 name: "nat-traversal".to_string(),
                 image: Some(sidecar_image),
                 env: Some(env),
+                security_context: Some(SecurityContext {
+                    allow_privilege_escalation: Some(false),
+                    capabilities: Some(Capabilities {
+                        drop: Some(vec!["ALL".to_string()]),
+                        add: None,
+                    }),
+                    run_as_non_root: Some(true),
+                    privileged: Some(false),
+                    seccomp_profile: Some(SeccompProfile {
+                        type_: "RuntimeDefault".to_string(),
+                        localhost_profile: None,
+                    }),
+                    ..Default::default()
+                }),
                 ..Default::default()
             });
         }
@@ -2119,6 +2178,8 @@ fn build_container(node: &StellarNode, enable_mtls: bool) -> Container {
                 drop: Some(vec!["ALL".to_string()]),
             }),
             run_as_non_root: Some(true),
+            privileged: Some(false),
+            read_only_root_filesystem: Some(true),
             seccomp_profile: Some(SeccompProfile {
                 localhost_profile: None,
                 type_: "RuntimeDefault".to_string(),
@@ -2862,6 +2923,7 @@ mod ensure_pvc_tests {
                 sidecars: None,
                 nat_traversal: None,
                 custom_network_passphrase: None,
+                cross_cloud_failover: None,
                 history_mode: Default::default(),
                 storage: Default::default(),
             },

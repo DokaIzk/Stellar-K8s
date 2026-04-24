@@ -55,6 +55,7 @@ use super::archive_health::{
     ARCHIVE_LAG_THRESHOLD,
 };
 use super::conditions;
+use super::cross_cloud_failover;
 use super::cve_reconciler;
 use super::dr;
 use super::dr_drill;
@@ -68,6 +69,7 @@ use super::mtls;
 use super::oci_snapshot;
 use super::operator_config::{hardcoded_defaults, OperatorConfig};
 use super::peer_discovery;
+use super::pss;
 use super::remediation;
 use super::resources;
 use super::service_mesh;
@@ -572,6 +574,14 @@ pub(crate) async fn apply_stellar_node(
     }
 
     let propagated_labels = LabelPropagator::new(node).compute();
+
+    // Enforce PSS 'restricted' on the managed namespace (idempotent)
+    if let Err(e) = pss::ensure_namespace_pss_labels(client, &namespace).await {
+        warn!(
+            "Failed to apply PSS labels to namespace '{}': {}. Continuing reconciliation.",
+            namespace, e
+        );
+    }
 
     // 1. Core infrastructure (PVC and ConfigMap) always managed by operator
     apply_or_emit(ctx, node, ActionType::Update, "PVC and ConfigMap", async {
@@ -1529,6 +1539,79 @@ pub(crate) async fn apply_stellar_node(
             Ok(())
         })
         .await?;
+    }
+
+    // 8b. Cross-cloud failover for Horizon/SorobanRpc nodes
+    if node
+        .spec
+        .cross_cloud_failover
+        .as_ref()
+        .map(|c| c.enabled)
+        .unwrap_or(false)
+    {
+        let prev_cc_failover = node
+            .status
+            .as_ref()
+            .and_then(|s| s.cross_cloud_failover_status.as_ref())
+            .map(|s| s.failover_active)
+            .unwrap_or(false);
+
+        match cross_cloud_failover::reconcile_cross_cloud_failover(client, node).await {
+            Ok(Some(cc_status)) => {
+                if cc_status.failover_active && !prev_cc_failover {
+                    let recorder = recorder_for(client, &ctx.event_reporter, node);
+                    if let Err(e) = publish_object_event(
+                        &recorder,
+                        EventType::Normal,
+                        "CrossCloudFailoverActivated",
+                        "CrossCloudFailover",
+                        &format!(
+                            "Cross-cloud failover activated. Traffic routed to: {}",
+                            cc_status.active_cloud.as_deref().unwrap_or("unknown")
+                        ),
+                    )
+                    .await
+                    {
+                        warn!("Failed to publish CrossCloudFailoverActivated event: {e}");
+                    }
+                } else if !cc_status.failover_active && prev_cc_failover {
+                    let recorder = recorder_for(client, &ctx.event_reporter, node);
+                    if let Err(e) = publish_object_event(
+                        &recorder,
+                        EventType::Normal,
+                        "CrossCloudFailbackCompleted",
+                        "CrossCloudFailover",
+                        &format!(
+                            "Cross-cloud failback completed. Traffic restored to: {}",
+                            cc_status.active_cloud.as_deref().unwrap_or("primary")
+                        ),
+                    )
+                    .await
+                    {
+                        warn!("Failed to publish CrossCloudFailbackCompleted event: {e}");
+                    }
+                }
+
+                apply_or_emit(
+                    ctx,
+                    node,
+                    ActionType::Update,
+                    "Status (Cross-Cloud Failover)",
+                    async {
+                        update_cross_cloud_failover_status(client, node, cc_status).await?;
+                        Ok(())
+                    },
+                )
+                .await?;
+            }
+            Ok(None) => {} // Not configured or not applicable
+            Err(e) => {
+                warn!(
+                    "Cross-cloud failover reconciliation failed for {}/{}: {}",
+                    namespace, name, e
+                );
+            }
+        }
     }
 
     // 9. Auto-remediation check
@@ -2935,6 +3018,31 @@ async fn update_dr_status(
     let patch = serde_json::json!({
         "status": {
             "drStatus": dr_status
+        }
+    });
+
+    api.patch_status(
+        &node.name_any(),
+        &PatchParams::apply("stellar-operator"),
+        &Patch::Merge(&patch),
+    )
+    .await
+    .map_err(Error::KubeError)?;
+
+    Ok(())
+}
+
+async fn update_cross_cloud_failover_status(
+    client: &Client,
+    node: &StellarNode,
+    status: crate::crd::CrossCloudFailoverStatus,
+) -> Result<()> {
+    let namespace = node.namespace().unwrap_or_else(|| "default".to_string());
+    let api: Api<StellarNode> = Api::namespaced(client.clone(), &namespace);
+
+    let patch = serde_json::json!({
+        "status": {
+            "crossCloudFailoverStatus": status
         }
     });
 
