@@ -1302,7 +1302,7 @@ fn build_pod_template(
             Volume {
                 name: "config".to_string(),
                 config_map: Some(k8s_openapi::api::core::v1::ConfigMapVolumeSource {
-                    name: Some(resource_name(node, "config")),
+                    name: resource_name(node, "config"),
                     ..Default::default()
                 }),
                 ..Default::default()
